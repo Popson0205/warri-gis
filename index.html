@@ -320,17 +320,23 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .leaflet-top.leaflet-left { left: auto; right: 10px; }
+    .leaflet-left .leaflet-control { float: right; }
+
+    #sidebar-footer {
+      margin-top: auto;
+      padding: 14px 16px;
+      border-top: 1px solid #1e3a54;
+      text-align: center;
+      font-size: 0.7rem;
+      color: #8ab4d4;
+      flex-shrink: 0;
+    }
+    #sidebar-footer span { color: #5bc0de; font-weight: 600; display: block; margin-top: 2px; }
+
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: #0d1b2a; }
     ::-webkit-scrollbar-thumb { background: #2a6496; border-radius: 3px; }
-    
-    .leaflet-left .leaflet-control {
-  float: right;
-}
-.leaflet-top.leaflet-left {
-  left: auto;
-  right: 10px;
-}
   </style>
 </head>
 <body>
@@ -347,7 +353,6 @@
       </div>
     </div>
   </div>
-  <div class="powered-by">Powered by<br><span>Popson Geospatial Services</span></div>
 </div>
 
 <!-- MAIN -->
@@ -389,6 +394,9 @@
       </div>
     </div>
 
+    <div id="sidebar-footer">
+      Powered by<span>Popson Geospatial Services</span>
+    </div>
   </div><!-- /sidebar -->
 
   <!-- MAP -->
@@ -410,7 +418,6 @@
   </span>
 </div>
 
-  
 <script>
 // ═══════════════════════════════════════════════
 //  LAYER DEFINITIONS
