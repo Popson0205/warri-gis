@@ -18,7 +18,7 @@ LAYER_FILES = {
     'forest':      'Forest.geojson',
     'vegetation':  'Vegetation.geojson',
     'wetlands':    'Wetlands.geojson',
-    'waterbodies': 'Water Bodies.geojson',
+    'waterbodies': 'Waterbodies.geojson',
     'barerock':    'Barerock.geojson',
 }
 
