@@ -5,12 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Warri Region GIS – Popson Geospatial Services</title>
 
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- Leaflet.VectorGrid for canvas-rendered tiles (handles huge datasets) -->
-  <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,8 +32,31 @@
       flex-shrink: 0;
       box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     }
+    #header .left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #hamburger {
+      background: transparent;
+      border: 1px solid #2a6496;
+      border-radius: 6px;
+      color: #5bc0de;
+      font-size: 1.2rem;
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    #hamburger:hover { background: #1a3550; }
     #header .brand {
-      display: flex; align-items: center; gap: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
     #header .logo-icon {
       width: 38px; height: 38px;
@@ -46,67 +65,67 @@
       display: flex; align-items: center; justify-content: center;
       font-size: 18px;
     }
-    #header h1 { font-size: 1.15rem; font-weight: 700; color: #fff; }
-    #header .subtitle { font-size: 0.7rem; color: #8ab4d4; margin-top: 1px; }
+    #header h1 { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    #header .subtitle { font-size: 0.68rem; color: #8ab4d4; margin-top: 1px; }
     #header .powered-by {
-      font-size: 0.7rem; color: #8ab4d4; text-align: right;
+      font-size: 0.68rem; color: #8ab4d4; text-align: right; white-space: nowrap;
     }
     #header .powered-by span { color: #5bc0de; font-weight: 600; }
 
-    /* ─── MAIN LAYOUT ─── */
-    #main { display: flex; flex: 1; overflow: hidden; }
+    /* ─── MAIN ─── */
+    #main { display: flex; flex: 1; overflow: hidden; position: relative; }
 
     /* ─── SIDEBAR ─── */
-#sidebar {
-  width: 270px;
-  background: #0d1b2a;
-  border-right: 1px solid #1e3a54;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  flex-shrink: 0;
-  transition: width 0.3s ease, min-width 0.3s ease;
-  position: relative;
-  min-width: 270px;
-}
-#sidebar.collapsed {
-  width: 0;
-  min-width: 0;
-  overflow: hidden;
-  border-right: none;
-}
-#sidebar-toggle {
-  position: absolute;
-  top: 50%;
-  right: -16px;
-  transform: translateY(-50%);
-  z-index: 1000;
-  width: 16px;
-  height: 48px;
-  background: #1b3a5c;
-  border: 1px solid #2a6496;
-  border-left: none;
-  border-radius: 0 6px 6px 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #5bc0de;
-  font-size: 10px;
-  transition: right 0.3s ease;
-}
-#sidebar.collapsed #sidebar-toggle {
-  right: -16px;
-}
-@media (max-width: 600px) {
-  #sidebar {
-    position: absolute;
-    z-index: 999;
-    height: calc(100% - 56px);
-    top: 0;
-  }
-}
+    #sidebar {
+      width: 270px;
+      min-width: 270px;
+      background: #0d1b2a;
+      border-right: 1px solid #1e3a54;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+      transition: width 0.3s ease, min-width 0.3s ease;
+    }
+    #sidebar.collapsed {
+      width: 0;
+      min-width: 0;
+      overflow: hidden;
+      border-right: none;
+    }
+
+    /* On mobile: sidebar overlays the map */
+    @media (max-width: 600px) {
+      #sidebar {
+        position: absolute;
+        z-index: 999;
+        height: 100%;
+        top: 0;
+        left: 0;
+        width: 270px;
+        min-width: 270px;
+      }
+      #sidebar.collapsed {
+        width: 0;
+        min-width: 0;
+      }
+    }
+
+    .sidebar-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid #1e3a54;
+    }
+    .sidebar-section h3 {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #5bc0de;
+      margin-bottom: 10px;
+    }
+
     /* Search */
+    .search-wrap { position: relative; }
     #search-box {
       width: 100%;
       background: #152535;
@@ -119,28 +138,35 @@
       transition: border-color 0.2s;
     }
     #search-box:focus { border-color: #5bc0de; }
-#autocomplete-list {
-  position: absolute;
-  z-index: 9999;
-  background: #0d1b2a;
-  border: 1px solid #2a6496;
-  border-radius: 0 0 6px 6px;
-  width: calc(270px - 32px);
-  max-height: 200px;
-  overflow-y: auto;
-  display: none;
-}
-#autocomplete-list .ac-item {
-  padding: 8px 10px;
-  font-size: 0.78rem;
-  color: #c9dce8;
-  cursor: pointer;
-  border-bottom: 1px solid #1e3a54;
-  line-height: 1.3;
-}
-#autocomplete-list .ac-item:last-child { border: none; }
-#autocomplete-list .ac-item:hover { background: #152535; color: #5bc0de; }
-    
+    #search-results {
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: #8ab4d4;
+      min-height: 18px;
+    }
+    #autocomplete-list {
+      position: absolute;
+      z-index: 9999;
+      background: #0d1b2a;
+      border: 1px solid #2a6496;
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      width: 100%;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+    }
+    #autocomplete-list .ac-item {
+      padding: 8px 10px;
+      font-size: 0.78rem;
+      color: #c9dce8;
+      cursor: pointer;
+      border-bottom: 1px solid #1e3a54;
+      line-height: 1.3;
+    }
+    #autocomplete-list .ac-item:last-child { border: none; }
+    #autocomplete-list .ac-item:hover { background: #152535; color: #5bc0de; }
+
     /* Layer items */
     .layer-item {
       display: flex;
@@ -149,10 +175,8 @@
       padding: 7px 0;
       cursor: pointer;
       user-select: none;
-      transition: opacity 0.2s;
     }
     .layer-item:hover { opacity: 0.85; }
-    .layer-item input[type=checkbox] { display: none; }
     .layer-toggle {
       width: 34px; height: 18px;
       background: #152535;
@@ -172,18 +196,13 @@
       transition: left 0.2s;
     }
     .layer-item.active .layer-toggle { background: #1a4a6e; border-color: #5bc0de; }
-    .layer-item.active .layer-toggle::after { left: 18px; background: #5bc0de; }
-
+    .layer-item.active .layer-toggle::after { left: 18px; }
     .layer-swatch {
       width: 14px; height: 14px;
       border-radius: 3px;
       flex-shrink: 0;
     }
-    .layer-label {
-      font-size: 0.82rem;
-      color: #c9dce8;
-      flex: 1;
-    }
+    .layer-label { font-size: 0.82rem; color: #c9dce8; flex: 1; }
     .layer-badge {
       font-size: 0.65rem;
       background: #152535;
@@ -191,6 +210,7 @@
       border-radius: 4px;
       padding: 1px 5px;
       color: #8ab4d4;
+      white-space: nowrap;
     }
     .layer-badge.loading { border-color: #e8a838; color: #e8a838; }
     .layer-badge.loaded  { border-color: #3db87a; color: #3db87a; }
@@ -209,14 +229,14 @@
       padding: 8px 6px;
       text-align: center;
       cursor: pointer;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       color: #8ab4d4;
       transition: all 0.2s;
       line-height: 1.3;
     }
     .basemap-btn:hover { border-color: #2a6496; color: #eee; }
     .basemap-btn.active { border-color: #5bc0de; color: #5bc0de; background: #1a3550; }
-    .basemap-btn .bm-icon { font-size: 1.3rem; display: block; margin-bottom: 3px; }
+    .basemap-btn .bm-icon { font-size: 1.2rem; display: block; margin-bottom: 3px; }
 
     /* Stats */
     .stat-row {
@@ -236,10 +256,11 @@
       background: #0d1b2a;
       border-top: 1px solid #1e3a54;
       padding: 4px 14px;
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       color: #8ab4d4;
-      display: flex; gap: 20px; align-items: center;
+      display: flex; gap: 16px; align-items: center;
       flex-shrink: 0;
+      flex-wrap: wrap;
     }
     #statusbar .coord { color: #5bc0de; }
     #statusbar .progress {
@@ -247,7 +268,7 @@
       display: flex; align-items: center; gap: 8px;
     }
     .progress-bar {
-      width: 100px; height: 6px;
+      width: 80px; height: 5px;
       background: #152535;
       border-radius: 3px;
       overflow: hidden;
@@ -271,8 +292,7 @@
       color: #5bc0de; margin-bottom: 6px;
     }
     .popup-row {
-      font-size: 0.78rem; padding: 2px 0;
-      color: #c9dce8;
+      font-size: 0.78rem; padding: 2px 0; color: #c9dce8;
     }
     .popup-row span { color: #8ab4d4; margin-right: 4px; }
 
@@ -300,7 +320,6 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: #0d1b2a; }
     ::-webkit-scrollbar-thumb { background: #2a6496; border-radius: 3px; }
@@ -309,13 +328,15 @@
 <body>
 
 <!-- HEADER -->
-  <div id="header">
+<div id="header">
+  <div class="left">
     <button id="hamburger" onclick="toggleSidebar()" title="Toggle Panel">☰</button>
-  <div class="brand">
-    <div class="logo-icon">🗺️</div>
-    <div>
-      <h1>Warri Region GIS Platform</h1>
-      <div class="subtitle">Street Naming & House Numbering System</div>
+    <div class="brand">
+      <div class="logo-icon">🗺️</div>
+      <div>
+        <h1>Warri Region GIS Platform</h1>
+        <div class="subtitle">Street Naming &amp; House Numbering System</div>
+      </div>
     </div>
   </div>
   <div class="powered-by">Powered by<br><span>Popson Geospatial Services</span></div>
@@ -324,15 +345,13 @@
 <!-- MAIN -->
 <div id="main">
 
-
-   <!-- SIDEBAR -->
+  <!-- SIDEBAR -->
   <div id="sidebar">
-  
-    
+
     <!-- Search -->
     <div class="sidebar-section">
       <h3>🔍 Search</h3>
-       <div style="position:relative">
+      <div class="search-wrap">
         <input id="search-box" type="text" placeholder="Search address, street, place…" autocomplete="off" />
         <div id="autocomplete-list"></div>
       </div>
@@ -362,7 +381,7 @@
       </div>
     </div>
 
-  </div>
+  </div><!-- /sidebar -->
 
   <!-- MAP -->
   <div id="map"></div>
@@ -370,12 +389,13 @@
     <div class="spinner"></div>
     <div id="loading-text" style="font-size:0.82rem;color:#8ab4d4;">Loading layer…</div>
   </div>
-</div>
+
+</div><!-- /main -->
 
 <!-- STATUS BAR -->
 <div id="statusbar">
   <span>Warri Region, Delta State, Nigeria</span>
-  <span>Coordinates: <span class="coord" id="coord-display">—</span></span>
+  <span>Lat/Lng: <span class="coord" id="coord-display">—</span></span>
   <span class="progress">
     <span id="load-label">Ready</span>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
@@ -401,29 +421,28 @@ const LAYERS = {
 //  BASEMAPS
 // ═══════════════════════════════════════════════
 const BASEMAPS = {
-  osm:     { label: 'OpenStreetMap', icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '© OpenStreetMap' },
-  hybrid:  { label: 'Google Hybrid', icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr: '© Google Maps', noSubdomains: true },
-  terrain: { label: 'Google Terrain',icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', attr: '© Google Maps', noSubdomains: true },
-  topo:    { label: 'Topo Map',      icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr: '© OpenTopoMap' },
-  carto:   { label: 'Dark Carto',    icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr: '© CARTO' },
-  light:   { label: 'Light Carto',   icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attr: '© CARTO' },
+  hybrid:  { label: 'Google Hybrid',  icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
+  terrain: { label: 'Google Terrain', icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
+  osm:     { label: 'OpenStreetMap',  icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                             attr: '© OpenStreetMap',  sub: true  },
+  topo:    { label: 'Topo Map',       icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                               attr: '© OpenTopoMap',    sub: true  },
+  dark:    { label: 'Dark Carto',     icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                  attr: '© CARTO',          sub: true  },
+  light:   { label: 'Light Carto',    icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                 attr: '© CARTO',          sub: true  },
 };
 
 // ═══════════════════════════════════════════════
-//  MAP INIT
+//  MAP INIT  (centered on Warri)
 // ═══════════════════════════════════════════════
 const map = L.map('map', {
   center: [5.52, 5.74],
   zoom: 12,
   zoomControl: true,
-  attributionControl: true,
 });
 
 let currentBasemap = null;
-let leafletLayers = {};
-let loadedStates = {};
-let featureCounts = {};
-let buildingViewportTimeout = null;
+let leafletLayers  = {};
+let loadedStates   = {};
+let featureCounts  = {};
+let buildingTimer  = null;
 
 // ═══════════════════════════════════════════════
 //  BASEMAP SWITCHER
@@ -431,15 +450,14 @@ let buildingViewportTimeout = null;
 function setBasemap(key) {
   if (currentBasemap) map.removeLayer(currentBasemap);
   const bm = BASEMAPS[key];
-  const opts = {
+  currentBasemap = L.tileLayer(bm.url, {
     maxZoom: 20,
     attribution: bm.attr,
-  };
-  if (bm.noSubdomains) opts.subdomains = [''];
-  currentBasemap = L.tileLayer(bm.url, opts).addTo(map);
-  document.querySelectorAll('.basemap-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.key === key);
-  });
+    subdomains: bm.sub ? 'abc' : [''],
+  }).addTo(map);
+  document.querySelectorAll('.basemap-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.key === key)
+  );
 }
 
 const bmContainer = document.getElementById('basemap-btns');
@@ -451,7 +469,7 @@ Object.entries(BASEMAPS).forEach(([key, bm]) => {
   btn.onclick = () => setBasemap(key);
   bmContainer.appendChild(btn);
 });
-setBasemap('hybrid');   // Default: Google Hybrid
+setBasemap('hybrid');
 
 // ═══════════════════════════════════════════════
 //  LAYER CONTROLS
@@ -472,12 +490,11 @@ Object.entries(LAYERS).forEach(([key, cfg]) => {
 });
 
 // ═══════════════════════════════════════════════
-//  LOAD LAYER  (buildings get viewport loading)
+//  LOAD / UNLOAD LAYERS
 // ═══════════════════════════════════════════════
 function showLoading(text) {
-  const ov = document.getElementById('loading-overlay');
   document.getElementById('loading-text').textContent = text;
-  ov.style.display = 'block';
+  document.getElementById('loading-overlay').style.display = 'block';
 }
 function hideLoading() {
   document.getElementById('loading-overlay').style.display = 'none';
@@ -490,51 +507,47 @@ function setProgress(pct) {
 async function loadLayer(key) {
   const cfg = LAYERS[key];
   setBadge(key, 'loading', 'Loading…');
-  setProgress(10);
+  showLoading(`Loading ${cfg.label}…`);
+  setProgress(20);
 
-  let url;
-  if (key === 'buildings') {
-    // Viewport-based load for buildings
-    const b = map.getBounds();
-    url = `/api/layer/buildings/bbox?minx=${b.getWest()}&miny=${b.getSouth()}&maxx=${b.getEast()}&maxy=${b.getNorth()}`;
-  } else {
-    url = `/api/layer/${key}`;
-  }
+  let url = key === 'buildings'
+    ? (() => {
+        const b = map.getBounds();
+        return `/api/layer/buildings/bbox?minx=${b.getWest()}&miny=${b.getSouth()}&maxx=${b.getEast()}&maxy=${b.getNorth()}`;
+      })()
+    : `/api/layer/${key}`;
 
   try {
-    showLoading(`Loading ${cfg.label}…`);
-    setProgress(30);
+    setProgress(40);
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    setProgress(60);
+    setProgress(65);
     const data = await res.json();
     setProgress(85);
 
-    const count = data.features ? data.features.length : 0;
+    const count = (data.features || []).length;
     featureCounts[key] = count;
 
     if (leafletLayers[key]) map.removeLayer(leafletLayers[key]);
 
     leafletLayers[key] = L.geoJSON(data, {
-      style: (feat) => ({
-        color: cfg.color,
-        fillColor: cfg.fillColor === 'none' ? 'transparent' : cfg.fillColor,
+      style: () => ({
+        color:       cfg.color,
+        fillColor:   cfg.fillColor === 'none' ? 'transparent' : cfg.fillColor,
         fillOpacity: cfg.fillColor === 'none' ? 0 : cfg.fillOpacity,
-        weight: cfg.weight,
-        opacity: 0.9,
+        weight:      cfg.weight,
+        opacity:     0.9,
       }),
       pointToLayer: (feat, latlng) =>
         L.circleMarker(latlng, { radius: 5, color: cfg.color, fillColor: cfg.fillColor, fillOpacity: 0.8 }),
       onEachFeature: (feat, layer) => {
         const props = feat.properties || {};
-        if (Object.keys(props).length > 0) {
-          const rows = Object.entries(props)
-            .filter(([k, v]) => v !== null && v !== undefined && v !== '')
-            .slice(0, 8)
-            .map(([k, v]) => `<div class="popup-row"><span>${k}:</span>${v}</div>`)
-            .join('');
-          layer.bindPopup(`<div class="popup-title">${cfg.icon} ${cfg.label}</div>${rows || '<div class="popup-row">No attributes</div>'}`);
-        }
+        const rows = Object.entries(props)
+          .filter(([, v]) => v !== null && v !== undefined && v !== '')
+          .slice(0, 8)
+          .map(([k, v]) => `<div class="popup-row"><span>${k}:</span> ${v}</div>`)
+          .join('');
+        if (rows) layer.bindPopup(`<div class="popup-title">${cfg.icon} ${cfg.label}</div>${rows}`);
       },
       renderer: L.canvas({ tolerance: 2 }),
     }).addTo(map);
@@ -545,7 +558,7 @@ async function loadLayer(key) {
     hideLoading();
     updateStats();
   } catch (err) {
-    console.warn('Layer load error:', key, err);
+    console.warn('Layer error:', key, err);
     setBadge(key, 'missing', 'No file');
     hideLoading();
     setProgress(0);
@@ -553,57 +566,51 @@ async function loadLayer(key) {
 }
 
 function unloadLayer(key) {
-  if (leafletLayers[key]) {
-    map.removeLayer(leafletLayers[key]);
-    delete leafletLayers[key];
-  }
+  if (leafletLayers[key]) { map.removeLayer(leafletLayers[key]); delete leafletLayers[key]; }
   loadedStates[key] = false;
+  delete featureCounts[key];
   setBadge(key, '', 'Off');
   updateStats();
 }
 
 function toggleLayer(key, item) {
   item.classList.toggle('active');
-  if (item.classList.contains('active')) {
-    loadLayer(key);
-  } else {
-    unloadLayer(key);
-  }
+  item.classList.contains('active') ? loadLayer(key) : unloadLayer(key);
 }
 
 function setBadge(key, cls, text) {
-  const badge = document.getElementById('badge-' + key);
-  if (!badge) return;
-  badge.className = 'layer-badge' + (cls ? ' ' + cls : '');
-  badge.textContent = text;
+  const b = document.getElementById('badge-' + key);
+  if (!b) return;
+  b.className = 'layer-badge' + (cls ? ' ' + cls : '');
+  b.textContent = text;
 }
 
 // ═══════════════════════════════════════════════
-//  BUILDINGS VIEWPORT REFRESH ON MAP MOVE
+//  BUILDINGS VIEWPORT REFRESH
 // ═══════════════════════════════════════════════
-function refreshBuildingsIfActive() {
+function refreshBuildings() {
   const item = document.querySelector('.layer-item[data-layer="buildings"]');
   if (item && item.classList.contains('active')) {
-    clearTimeout(buildingViewportTimeout);
-    buildingViewportTimeout = setTimeout(() => loadLayer('buildings'), 600);
+    clearTimeout(buildingTimer);
+    buildingTimer = setTimeout(() => loadLayer('buildings'), 700);
   }
 }
-map.on('moveend', refreshBuildingsIfActive);
+map.on('moveend', refreshBuildings);
 map.on('zoomend', () => {
-  refreshBuildingsIfActive();
+  refreshBuildings();
   document.getElementById('stat-zoom').textContent = map.getZoom();
 });
 
 // ═══════════════════════════════════════════════
-//  STATISTICS
+//  STATS
 // ═══════════════════════════════════════════════
 function updateStats() {
   const loaded = Object.values(loadedStates).filter(Boolean).length;
   document.getElementById('stat-layers').textContent = loaded;
   const total = Object.values(featureCounts).reduce((a, b) => a + b, 0);
   document.getElementById('stat-total').textContent = total > 0 ? total.toLocaleString() : '—';
-  document.getElementById('stat-buildings').textContent = featureCounts['buildings'] !== undefined
-    ? featureCounts['buildings'].toLocaleString() : '—';
+  document.getElementById('stat-buildings').textContent =
+    featureCounts['buildings'] !== undefined ? featureCounts['buildings'].toLocaleString() : '—';
   document.getElementById('stat-zoom').textContent = map.getZoom();
 }
 updateStats();
@@ -611,34 +618,27 @@ updateStats();
 // ═══════════════════════════════════════════════
 //  COORDINATE DISPLAY
 // ═══════════════════════════════════════════════
-map.on('mousemove', (e) => {
+map.on('mousemove', e => {
   document.getElementById('coord-display').textContent =
     `${e.latlng.lat.toFixed(5)}°N, ${e.latlng.lng.toFixed(5)}°E`;
 });
 
 // ═══════════════════════════════════════════════
-//  SEARCH (Nominatim geocoder)
-// ═══════════════════════════════════════════════
-// ═══════════════════════════════════════════════
 //  SEARCH WITH AUTOCOMPLETE
 // ═══════════════════════════════════════════════
 let searchTimeout = null;
-let searchMarker = null;
+let searchMarker  = null;
 const searchInput = document.getElementById('search-box');
-const acList = document.getElementById('autocomplete-list');
+const acList      = document.getElementById('autocomplete-list');
 
-searchInput.addEventListener('input', (e) => {
+searchInput.addEventListener('input', e => {
   clearTimeout(searchTimeout);
   const q = e.target.value.trim();
   acList.style.display = 'none';
   acList.innerHTML = '';
-
-  if (q.length < 3) {
-    document.getElementById('search-results').textContent = 'Type to search…';
-    return;
-  }
-
-  document.getElementById('search-results').textContent = 'Searching…';
+  document.getElementById('search-results').textContent =
+    q.length < 3 ? 'Type to search…' : 'Searching…';
+  if (q.length < 3) return;
 
   searchTimeout = setTimeout(async () => {
     try {
@@ -652,31 +652,36 @@ searchInput.addEventListener('input', (e) => {
         return;
       }
 
-      // Populate autocomplete dropdown
       acList.innerHTML = '';
       results.forEach(item => {
         const div = document.createElement('div');
         div.className = 'ac-item';
         const parts = item.display_name.split(',');
-        div.textContent = parts.slice(0, 3).join(',');
+        div.textContent = parts.slice(0, 3).join(',').trim();
         div.title = item.display_name;
         div.onclick = () => {
-          searchInput.value = parts[0];
+          searchInput.value = parts[0].trim();
           acList.style.display = 'none';
-          document.getElementById('search-results').textContent = item.display_name.split(',').slice(0,3).join(',');
+          document.getElementById('search-results').textContent =
+            parts.slice(0, 3).join(',').trim();
           const lat = parseFloat(item.lat);
           const lon = parseFloat(item.lon);
           map.flyTo([lat, lon], 17, { duration: 1.2 });
           if (searchMarker) map.removeLayer(searchMarker);
           searchMarker = L.marker([lat, lon]).addTo(map)
-            .bindPopup(`<div class="popup-title">📍 ${parts[0]}</div>
-              <div class="popup-row"><span>Type:</span>${item.type}</div>`)
+            .bindPopup(`<div class="popup-title">📍 ${parts[0].trim()}</div>
+              <div class="popup-row"><span>Type:</span> ${item.type}</div>`)
             .openPopup();
+          // Auto-close sidebar on mobile after selecting
+          if (window.innerWidth <= 600) {
+            document.getElementById('sidebar').classList.add('collapsed');
+          }
         };
         acList.appendChild(div);
       });
       acList.style.display = 'block';
-      document.getElementById('search-results').textContent = `${results.length} results found`;
+      document.getElementById('search-results').textContent =
+        `${results.length} result${results.length > 1 ? 's' : ''} found`;
     } catch {
       document.getElementById('search-results').textContent = 'Search error.';
     }
@@ -684,40 +689,34 @@ searchInput.addEventListener('input', (e) => {
 });
 
 // Close dropdown when clicking outside
-document.addEventListener('click', (e) => {
-  if (!searchInput.contains(e.target)) {
+document.addEventListener('click', e => {
+  if (!searchInput.contains(e.target) && !acList.contains(e.target)) {
     acList.style.display = 'none';
   }
 });
+
+// ═══════════════════════════════════════════════
+//  COLLAPSIBLE SIDEBAR
+// ═══════════════════════════════════════════════
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  setTimeout(() => map.invalidateSize(), 310);
+}
+
+// Auto-collapse on mobile on load
+if (window.innerWidth <= 600) {
+  document.getElementById('sidebar').classList.add('collapsed');
+}
+
 // ═══════════════════════════════════════════════
 //  AUTO-LOAD BOUNDARY + ROADS on startup
 // ═══════════════════════════════════════════════
 window.addEventListener('load', () => {
   ['boundary', 'roads'].forEach(key => {
     const item = document.querySelector(`.layer-item[data-layer="${key}"]`);
-    if (item) {
-      item.classList.add('active');
-      loadLayer(key);
-    }
+    if (item) { item.classList.add('active'); loadLayer(key); }
   });
 });
-  
-  // ═══════════════════════════════════════════════
-//  COLLAPSIBLE SIDEBAR
-// ═══════════════════════════════════════════════
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const toggle = document.getElementById('sidebar-toggle');
-  sidebar.classList.toggle('collapsed');
-  toggle.textContent = sidebar.classList.contains('collapsed') ? '❯' : '❮';
-  setTimeout(() => map.invalidateSize(), 310);
-}
-
-// Auto-collapse on mobile
-if (window.innerWidth <= 600) {
-  document.getElementById('sidebar').classList.add('collapsed');
-  document.getElementById('sidebar-toggle').textContent = '❯';
-}
 </script>
 </body>
 </html>
