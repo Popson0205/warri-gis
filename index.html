@@ -437,7 +437,7 @@ const LAYERS = {
 //  BASEMAPS
 // ═══════════════════════════════════════════════
 const BASEMAPS = {
-  hybrid:  { label: 'Google Hybrid',  icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
+  hybrid:  { label: 'Google Hybrid',  icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
   terrain: { label: 'Google Terrain', icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
   osm:     { label: 'OpenStreetMap',  icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                             attr: '© OpenStreetMap',  sub: true  },
   topo:    { label: 'Topo Map',       icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                               attr: '© OpenTopoMap',    sub: true  },
@@ -602,19 +602,108 @@ function setBadge(key, cls, text) {
 }
 
 // ═══════════════════════════════════════════════
-//  BUILDINGS VIEWPORT REFRESH
+//  BUILDINGS VIEWPORT REFRESH — with tile cache
 // ═══════════════════════════════════════════════
-function refreshBuildings() {
+const _loadedTiles = new Set();   // tracks which grid cells are already rendered
+const TILE_DEG = 0.02;            // ~2km tiles
+
+function _tileKey(x, y) { return `${x},${y}`; }
+
+function _tilesForBounds(bounds) {
+  const tiles = [];
+  const x0 = Math.floor(bounds.getWest()  / TILE_DEG);
+  const y0 = Math.floor(bounds.getSouth() / TILE_DEG);
+  const x1 = Math.floor(bounds.getEast()  / TILE_DEG);
+  const y1 = Math.floor(bounds.getNorth() / TILE_DEG);
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      tiles.push({ x, y });
+  return tiles;
+}
+
+async function refreshBuildings() {
   const item = document.querySelector('.layer-item[data-layer="buildings"]');
-  if (item && item.classList.contains('active')) {
-    clearTimeout(buildingTimer);
-    buildingTimer = setTimeout(() => loadLayer('buildings'), 700);
+  if (!item || !item.classList.contains('active')) return;
+
+  const bounds = map.getBounds();
+  const tiles  = _tilesForBounds(bounds);
+  const newTiles = tiles.filter(t => !_loadedTiles.has(_tileKey(t.x, t.y)));
+
+  if (newTiles.length === 0) return;  // all visible tiles already loaded — instant!
+
+  // Only fetch the bounding box of the NEW unseen tiles
+  const minx = Math.min(...newTiles.map(t => t.x)) * TILE_DEG;
+  const miny = Math.min(...newTiles.map(t => t.y)) * TILE_DEG;
+  const maxx = (Math.max(...newTiles.map(t => t.x)) + 1) * TILE_DEG;
+  const maxy = (Math.max(...newTiles.map(t => t.y)) + 1) * TILE_DEG;
+
+  try {
+    setBadge('buildings', 'loading', 'Loading…');
+    const res = await fetch(`/api/layer/buildings/bbox?minx=${minx}&miny=${miny}&maxx=${maxx}&maxy=${maxy}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    if (data.features && data.features.length > 0) {
+      if (!leafletLayers['buildings']) {
+        // First load — create the layer
+        leafletLayers['buildings'] = L.geoJSON(null, {
+          style: () => ({
+            color: LAYERS.buildings.color,
+            fillColor: LAYERS.buildings.fillColor,
+            fillOpacity: LAYERS.buildings.fillOpacity,
+            weight: LAYERS.buildings.weight,
+            opacity: 0.9,
+          }),
+          onEachFeature: (feat, layer) => {
+            const props = feat.properties || {};
+            const rows = Object.entries(props)
+              .filter(([,v]) => v !== null && v !== undefined && v !== '')
+              .slice(0, 8)
+              .map(([k, v]) => `<div class="popup-row"><span>${k}:</span> ${v}</div>`)
+              .join('');
+            if (rows) layer.bindPopup(`<div class="popup-title">🏢 Buildings</div>${rows}`);
+          },
+          renderer: L.canvas({ tolerance: 2 }),
+        }).addTo(map);
+      }
+      // Add only new features (not full replace)
+      leafletLayers['buildings'].addData(data);
+      featureCounts['buildings'] = (featureCounts['buildings'] || 0) + data.features.length;
+    }
+
+    // Mark tiles as loaded
+    newTiles.forEach(t => _loadedTiles.add(_tileKey(t.x, t.y)));
+    loadedStates['buildings'] = true;
+    setBadge('buildings', 'loaded', (featureCounts['buildings'] || 0).toLocaleString() + ' ft');
+    updateStats();
+  } catch (err) {
+    console.warn('Buildings load error:', err);
+    setBadge('buildings', 'missing', 'Error');
   }
 }
-map.on('moveend', refreshBuildings);
+
+// Reset tile cache when zoom changes (different detail level)
+let lastZoom = map.getZoom();
 map.on('zoomend', () => {
-  refreshBuildings();
-  document.getElementById('stat-zoom').textContent = map.getZoom();
+  const newZoom = map.getZoom();
+  if (Math.abs(newZoom - lastZoom) >= 1) {
+    // Zoom changed meaningfully — clear cache and re-fetch
+    _loadedTiles.clear();
+    if (leafletLayers['buildings']) {
+      map.removeLayer(leafletLayers['buildings']);
+      delete leafletLayers['buildings'];
+    }
+    featureCounts['buildings'] = 0;
+  }
+  lastZoom = newZoom;
+  clearTimeout(buildingTimer);
+  buildingTimer = setTimeout(refreshBuildings, 500);
+  document.getElementById('stat-zoom').textContent = newZoom;
+});
+
+map.on('moveend', () => {
+  clearTimeout(buildingTimer);
+  buildingTimer = setTimeout(refreshBuildings, 500);
 });
 
 // ═══════════════════════════════════════════════
