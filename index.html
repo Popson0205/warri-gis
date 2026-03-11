@@ -604,187 +604,106 @@ function setBadge(key, cls, text) {
 // ═══════════════════════════════════════════════
 //  BUILDINGS VIEWPORT REFRESH — with tile cache
 // ═══════════════════════════════════════════════
-const _loadedTiles = new Set();
-const TILE_DEG = 0.02;                 // must match backend TILE_DEG
-const MAX_TILES_PER_REQUEST = 9;       // (3x3 tiles) keeps payload sane on Render
-const MAX_TILES_PER_MOVE = 12;         // limit new tiles per pan/zoom
-const REQUEST_DEBOUNCE_MS = 550;
+const _loadedTiles = new Set();   // tracks which grid cells are already rendered
+const TILE_DEG = 0.02;            // ~2km tiles
 
-let buildingTimer = null;
-let lastZoom = map.getZoom();
+function _tileKey(x, y) { return `${x},${y}`; }
 
-// boundary clamp (set once boundary layer loads)
-let BOUNDARY_BOUNDS = null;
-
-// If boundary is loaded, clamp request bbox to it
-function clampBoundsToBoundary(bounds) {
-  if (!BOUNDARY_BOUNDS) return bounds;
-  const west  = Math.max(bounds.getWest(),  BOUNDARY_BOUNDS.getWest());
-  const south = Math.max(bounds.getSouth(), BOUNDARY_BOUNDS.getSouth());
-  const east  = Math.min(bounds.getEast(),  BOUNDARY_BOUNDS.getEast());
-  const north = Math.min(bounds.getNorth(), BOUNDARY_BOUNDS.getNorth());
-  return L.latLngBounds([south, west], [north, east]);
-}
-
-function tileKey(x, y) { return `${x},${y}`; }
-
-function tilesForBounds(bounds) {
+function _tilesForBounds(bounds) {
+  const tiles = [];
   const x0 = Math.floor(bounds.getWest()  / TILE_DEG);
   const y0 = Math.floor(bounds.getSouth() / TILE_DEG);
   const x1 = Math.floor(bounds.getEast()  / TILE_DEG);
   const y1 = Math.floor(bounds.getNorth() / TILE_DEG);
-  const tiles = [];
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) tiles.push({ x, y });
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++)
+      tiles.push({ x, y });
   return tiles;
-}
-
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-async function fetchJsonWithRetry(url, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
-    } catch (e) {
-      if (attempt === retries) throw e;
-      // backoff
-      await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
-    }
-  }
-}
-
-async function ensureBuildingsLayer() {
-  if (leafletLayers['buildings']) return;
-
-  leafletLayers['buildings'] = L.geoJSON(null, {
-    style: () => ({
-      color: LAYERS.buildings.color,
-      fillColor: LAYERS.buildings.fillColor,
-      fillOpacity: LAYERS.buildings.fillOpacity,
-      weight: LAYERS.buildings.weight,
-      opacity: 0.9,
-    }),
-    onEachFeature: (feat, layer) => {
-      const props = feat.properties || {};
-      const rows = Object.entries(props)
-        .filter(([,v]) => v !== null && v !== undefined && v !== '')
-        .slice(0, 8)
-        .map(([k, v]) => `<div class="popup-row"><span>${k}:</span> ${v}</div>`)
-        .join('');
-      if (rows) layer.bindPopup(`<div class="popup-title">🏢 Buildings</div>${rows}`);
-    },
-    renderer: L.canvas({ tolerance: 2 }),
-  }).addTo(map);
-
-  featureCounts['buildings'] = 0;
-  loadedStates['buildings'] = true;
-  updateStats();
 }
 
 async function refreshBuildings() {
   const item = document.querySelector('.layer-item[data-layer="buildings"]');
   if (!item || !item.classList.contains('active')) return;
 
-  // Clamp to boundary if we know it (prevents wild bboxes)
-  let bounds = clampBoundsToBoundary(map.getBounds());
+  const bounds = map.getBounds();
+  const tiles  = _tilesForBounds(bounds);
+  const newTiles = tiles.filter(t => !_loadedTiles.has(_tileKey(t.x, t.y)));
 
-  // If clamp makes bounds invalid (outside boundary), stop
-  if (!bounds.isValid()) return;
+  if (newTiles.length === 0) return;  // all visible tiles already loaded — instant!
 
-  // Compute tiles for bounds
-  const tiles = tilesForBounds(bounds);
+  // Only fetch the bounding box of the NEW unseen tiles
+  const minx = Math.min(...newTiles.map(t => t.x)) * TILE_DEG;
+  const miny = Math.min(...newTiles.map(t => t.y)) * TILE_DEG;
+  const maxx = (Math.max(...newTiles.map(t => t.x)) + 1) * TILE_DEG;
+  const maxy = (Math.max(...newTiles.map(t => t.y)) + 1) * TILE_DEG;
 
-  // Only new tiles
-  let newTiles = tiles.filter(t => !_loadedTiles.has(tileKey(t.x, t.y)));
+  try {
+    setBadge('buildings', 'loading', 'Loading…');
+    const res = await fetch(`/api/layer/buildings/bbox?minx=${minx}&miny=${miny}&maxx=${maxx}&maxy=${maxy}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
 
-  // Hard cap new tiles per move (prevents huge downloads)
-  if (newTiles.length > MAX_TILES_PER_MOVE) {
-    // Take closest tiles to center first
-    const c = bounds.getCenter();
-    newTiles.sort((a, b) => {
-      const ax = (a.x + 0.5) * TILE_DEG, ay = (a.y + 0.5) * TILE_DEG;
-      const bx = (b.x + 0.5) * TILE_DEG, by = (b.y + 0.5) * TILE_DEG;
-      const da = Math.abs(ax - c.lng) + Math.abs(ay - c.lat);
-      const db = Math.abs(bx - c.lng) + Math.abs(by - c.lat);
-      return da - db;
-    });
-    newTiles = newTiles.slice(0, MAX_TILES_PER_MOVE);
-  }
-
-  if (newTiles.length === 0) return;
-
-  await ensureBuildingsLayer();
-
-  setBadge('buildings', 'loading', 'Loading…');
-
-  // Fetch in chunks (each chunk <= 3x3 tiles bbox)
-  const groups = chunk(newTiles, MAX_TILES_PER_REQUEST);
-
-  for (const group of groups) {
-    // bbox for this chunk
-    const minx = Math.min(...group.map(t => t.x)) * TILE_DEG;
-    const miny = Math.min(...group.map(t => t.y)) * TILE_DEG;
-    const maxx = (Math.max(...group.map(t => t.x)) + 1) * TILE_DEG;
-    const maxy = (Math.max(...group.map(t => t.y)) + 1) * TILE_DEG;
-
-    const url = `/api/layer/buildings/bbox?minx=${minx}&miny=${miny}&maxx=${maxx}&maxy=${maxy}`;
-
-    try {
-      const data = await fetchJsonWithRetry(url, 2);
-
-      if (data.features && data.features.length) {
-        leafletLayers['buildings'].addData(data);
-        featureCounts['buildings'] += data.features.length;
+    if (data.features && data.features.length > 0) {
+      if (!leafletLayers['buildings']) {
+        // First load — create the layer
+        leafletLayers['buildings'] = L.geoJSON(null, {
+          style: () => ({
+            color: LAYERS.buildings.color,
+            fillColor: LAYERS.buildings.fillColor,
+            fillOpacity: LAYERS.buildings.fillOpacity,
+            weight: LAYERS.buildings.weight,
+            opacity: 0.9,
+          }),
+          onEachFeature: (feat, layer) => {
+            const props = feat.properties || {};
+            const rows = Object.entries(props)
+              .filter(([,v]) => v !== null && v !== undefined && v !== '')
+              .slice(0, 8)
+              .map(([k, v]) => `<div class="popup-row"><span>${k}:</span> ${v}</div>`)
+              .join('');
+            if (rows) layer.bindPopup(`<div class="popup-title">🏢 Buildings</div>${rows}`);
+          },
+          renderer: L.canvas({ tolerance: 2 }),
+        }).addTo(map);
       }
-
-      // Mark tiles as loaded even if empty (so we don't refetch forever)
-      group.forEach(t => _loadedTiles.add(tileKey(t.x, t.y)));
-
-      setBadge('buildings', 'loaded', featureCounts['buildings'].toLocaleString() + ' ft');
-      updateStats();
-
-    } catch (e) {
-      // On Render free tier, intermittent 502 happens — don’t spam requests
-      console.warn('Buildings load error:', e);
-      setBadge('buildings', 'missing', 'Retry…');
-      break;
+      // Add only new features (not full replace)
+      leafletLayers['buildings'].addData(data);
+      featureCounts['buildings'] = (featureCounts['buildings'] || 0) + data.features.length;
     }
+
+    // Mark tiles as loaded
+    newTiles.forEach(t => _loadedTiles.add(_tileKey(t.x, t.y)));
+    loadedStates['buildings'] = true;
+    setBadge('buildings', 'loaded', (featureCounts['buildings'] || 0).toLocaleString() + ' ft');
+    updateStats();
+  } catch (err) {
+    console.warn('Buildings load error:', err);
+    setBadge('buildings', 'missing', 'Error');
   }
 }
 
-// Reset buildings cache on meaningful zoom change
-function resetBuildingsCache() {
-  _loadedTiles.clear();
-  featureCounts['buildings'] = 0;
-  if (leafletLayers['buildings']) {
-    map.removeLayer(leafletLayers['buildings']);
-    delete leafletLayers['buildings'];
+// Reset tile cache when zoom changes (different detail level)
+let lastZoom = map.getZoom();
+map.on('zoomend', () => {
+  const newZoom = map.getZoom();
+  if (Math.abs(newZoom - lastZoom) >= 1) {
+    // Zoom changed meaningfully — clear cache and re-fetch
+    _loadedTiles.clear();
+    if (leafletLayers['buildings']) {
+      map.removeLayer(leafletLayers['buildings']);
+      delete leafletLayers['buildings'];
+    }
+    featureCounts['buildings'] = 0;
   }
-  setBadge('buildings', '', 'Off');
-  updateStats();
-}
+  lastZoom = newZoom;
+  clearTimeout(buildingTimer);
+  buildingTimer = setTimeout(refreshBuildings, 500);
+  document.getElementById('stat-zoom').textContent = newZoom;
+});
 
 map.on('moveend', () => {
   clearTimeout(buildingTimer);
-  buildingTimer = setTimeout(refreshBuildings, REQUEST_DEBOUNCE_MS);
-});
-
-map.on('zoomend', () => {
-  const z = map.getZoom();
-  document.getElementById('stat-zoom').textContent = z;
-
-  if (Math.abs(z - lastZoom) >= 1) {
-    resetBuildingsCache();
-  }
-  lastZoom = z;
-
-  clearTimeout(buildingTimer);
-  buildingTimer = setTimeout(refreshBuildings, REQUEST_DEBOUNCE_MS);
+  buildingTimer = setTimeout(refreshBuildings, 500);
 });
 
 // ═══════════════════════════════════════════════
