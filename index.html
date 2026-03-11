@@ -57,29 +57,55 @@
     #main { display: flex; flex: 1; overflow: hidden; }
 
     /* ─── SIDEBAR ─── */
-    #sidebar {
-      width: 270px;
-      background: #0d1b2a;
-      border-right: 1px solid #1e3a54;
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
-      flex-shrink: 0;
-    }
-
-    .sidebar-section {
-      padding: 14px 16px;
-      border-bottom: 1px solid #1e3a54;
-    }
-    .sidebar-section h3 {
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: #5bc0de;
-      margin-bottom: 10px;
-    }
-
+#sidebar {
+  width: 270px;
+  background: #0d1b2a;
+  border-right: 1px solid #1e3a54;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+  transition: width 0.3s ease, min-width 0.3s ease;
+  position: relative;
+  min-width: 270px;
+}
+#sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-right: none;
+}
+#sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  right: -16px;
+  transform: translateY(-50%);
+  z-index: 1000;
+  width: 16px;
+  height: 48px;
+  background: #1b3a5c;
+  border: 1px solid #2a6496;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5bc0de;
+  font-size: 10px;
+  transition: right 0.3s ease;
+}
+#sidebar.collapsed #sidebar-toggle {
+  right: -16px;
+}
+@media (max-width: 600px) {
+  #sidebar {
+    position: absolute;
+    z-index: 999;
+    height: calc(100% - 56px);
+    top: 0;
+  }
+}
     /* Search */
     #search-box {
       width: 100%;
@@ -93,13 +119,28 @@
       transition: border-color 0.2s;
     }
     #search-box:focus { border-color: #5bc0de; }
-    #search-results {
-      margin-top: 8px;
-      font-size: 0.78rem;
-      color: #8ab4d4;
-      min-height: 18px;
-    }
-
+#autocomplete-list {
+  position: absolute;
+  z-index: 9999;
+  background: #0d1b2a;
+  border: 1px solid #2a6496;
+  border-radius: 0 0 6px 6px;
+  width: calc(270px - 32px);
+  max-height: 200px;
+  overflow-y: auto;
+  display: none;
+}
+#autocomplete-list .ac-item {
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: #c9dce8;
+  cursor: pointer;
+  border-bottom: 1px solid #1e3a54;
+  line-height: 1.3;
+}
+#autocomplete-list .ac-item:last-child { border: none; }
+#autocomplete-list .ac-item:hover { background: #152535; color: #5bc0de; }
+    
     /* Layer items */
     .layer-item {
       display: flex;
@@ -282,13 +323,18 @@
 <!-- MAIN -->
 <div id="main">
 
-  <!-- SIDEBAR -->
-  <div id="sidebar">
 
+   <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Panel">❯</div>
+    
     <!-- Search -->
     <div class="sidebar-section">
       <h3>🔍 Search</h3>
-      <input id="search-box" type="text" placeholder="Search address, street, place…" />
+       <div style="position:relative">
+        <input id="search-box" type="text" placeholder="Search address, street, place…" autocomplete="off" />
+        <div id="autocomplete-list"></div>
+      </div>
       <div id="search-results">Type to search…</div>
     </div>
 
@@ -572,42 +618,76 @@ map.on('mousemove', (e) => {
 // ═══════════════════════════════════════════════
 //  SEARCH (Nominatim geocoder)
 // ═══════════════════════════════════════════════
-let searchMarker = null;
+// ═══════════════════════════════════════════════
+//  SEARCH WITH AUTOCOMPLETE
+// ═══════════════════════════════════════════════
 let searchTimeout = null;
+let searchMarker = null;
+const searchInput = document.getElementById('search-box');
+const acList = document.getElementById('autocomplete-list');
 
-document.getElementById('search-box').addEventListener('input', (e) => {
+searchInput.addEventListener('input', (e) => {
   clearTimeout(searchTimeout);
   const q = e.target.value.trim();
+  acList.style.display = 'none';
+  acList.innerHTML = '';
+
   if (q.length < 3) {
     document.getElementById('search-results').textContent = 'Type to search…';
     return;
   }
+
+  document.getElementById('search-results').textContent = 'Searching…';
+
   searchTimeout = setTimeout(async () => {
-    document.getElementById('search-results').textContent = 'Searching…';
     try {
       const r = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', Warri, Nigeria')}&format=json&limit=3`
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', Warri, Nigeria')}&format=json&limit=5&addressdetails=1`
       );
       const results = await r.json();
+
       if (!results.length) {
         document.getElementById('search-results').textContent = 'No results found.';
         return;
       }
-      const best = results[0];
-      const lat = parseFloat(best.lat), lon = parseFloat(best.lon);
-      map.flyTo([lat, lon], 16, { duration: 1.2 });
-      if (searchMarker) map.removeLayer(searchMarker);
-      searchMarker = L.marker([lat, lon]).addTo(map)
-        .bindPopup(`<div class="popup-title">📍 ${best.display_name.split(',')[0]}</div>
-          <div class="popup-row"><span>Type:</span>${best.type}</div>`)
-        .openPopup();
-      document.getElementById('search-results').textContent = `Found: ${best.display_name.split(',').slice(0,2).join(',')}`;
+
+      // Populate autocomplete dropdown
+      acList.innerHTML = '';
+      results.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'ac-item';
+        const parts = item.display_name.split(',');
+        div.textContent = parts.slice(0, 3).join(',');
+        div.title = item.display_name;
+        div.onclick = () => {
+          searchInput.value = parts[0];
+          acList.style.display = 'none';
+          document.getElementById('search-results').textContent = item.display_name.split(',').slice(0,3).join(',');
+          const lat = parseFloat(item.lat);
+          const lon = parseFloat(item.lon);
+          map.flyTo([lat, lon], 17, { duration: 1.2 });
+          if (searchMarker) map.removeLayer(searchMarker);
+          searchMarker = L.marker([lat, lon]).addTo(map)
+            .bindPopup(`<div class="popup-title">📍 ${parts[0]}</div>
+              <div class="popup-row"><span>Type:</span>${item.type}</div>`)
+            .openPopup();
+        };
+        acList.appendChild(div);
+      });
+      acList.style.display = 'block';
+      document.getElementById('search-results').textContent = `${results.length} results found`;
     } catch {
       document.getElementById('search-results').textContent = 'Search error.';
     }
-  }, 500);
+  }, 400);
 });
 
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (!searchInput.contains(e.target)) {
+    acList.style.display = 'none';
+  }
+});
 // ═══════════════════════════════════════════════
 //  AUTO-LOAD BOUNDARY + ROADS on startup
 // ═══════════════════════════════════════════════
@@ -620,6 +700,23 @@ window.addEventListener('load', () => {
     }
   });
 });
+  
+  // ═══════════════════════════════════════════════
+//  COLLAPSIBLE SIDEBAR
+// ═══════════════════════════════════════════════
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('sidebar-toggle');
+  sidebar.classList.toggle('collapsed');
+  toggle.textContent = sidebar.classList.contains('collapsed') ? '❯' : '❮';
+  setTimeout(() => map.invalidateSize(), 310);
+}
+
+// Auto-collapse on mobile
+if (window.innerWidth <= 600) {
+  document.getElementById('sidebar').classList.add('collapsed');
+  document.getElementById('sidebar-toggle').textContent = '❯';
+}
 </script>
 </body>
 </html>
