@@ -2,8 +2,10 @@ services:
   - type: web
     name: warri-region-gis
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 2 --timeout 120 --bind 0.0.0.0:$PORT
+    buildCommand: pip install -r requirements.txt && python tile_builder.py
+    startCommand: gunicorn app:app --workers 2 --timeout 60 --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: BUILDINGS_URL
+        sync: false
