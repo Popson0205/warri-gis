@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Warri Region GIS – Popson Geospatial Services</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet.VectorGrid for canvas-rendered tiles (handles huge datasets) -->
+  <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ─── HEADER ─── */
+    #header {
+      background: linear-gradient(135deg, #0d1b2a 0%, #1b3a5c 100%);
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #2a6496;
+      flex-shrink: 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+    #header .brand {
+      display: flex; align-items: center; gap: 12px;
+    }
+    #header .logo-icon {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg,#2a6496,#5bc0de);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    #header h1 { font-size: 1.15rem; font-weight: 700; color: #fff; }
+    #header .subtitle { font-size: 0.7rem; color: #8ab4d4; margin-top: 1px; }
+    #header .powered-by {
+      font-size: 0.7rem; color: #8ab4d4; text-align: right;
+    }
+    #header .powered-by span { color: #5bc0de; font-weight: 600; }
+
+    /* ─── MAIN LAYOUT ─── */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ─── SIDEBAR ─── */
+    #sidebar {
+      width: 270px;
+      background: #0d1b2a;
+      border-right: 1px solid #1e3a54;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid #1e3a54;
+    }
+    .sidebar-section h3 {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #5bc0de;
+      margin-bottom: 10px;
+    }
+
+    /* Search */
+    #search-box {
+      width: 100%;
+      background: #152535;
+      border: 1px solid #2a6496;
+      border-radius: 6px;
+      color: #eee;
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #search-box:focus { border-color: #5bc0de; }
+    #search-results {
+      margin-top: 8px;
+      font-size: 0.78rem;
+      color: #8ab4d4;
+      min-height: 18px;
+    }
+
+    /* Layer items */
+    .layer-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      cursor: pointer;
+      user-select: none;
+      transition: opacity 0.2s;
+    }
+    .layer-item:hover { opacity: 0.85; }
+    .layer-item input[type=checkbox] { display: none; }
+    .layer-toggle {
+      width: 34px; height: 18px;
+      background: #152535;
+      border: 1px solid #2a6496;
+      border-radius: 9px;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .layer-toggle::after {
+      content: '';
+      position: absolute;
+      width: 12px; height: 12px;
+      background: #5bc0de;
+      border-radius: 50%;
+      top: 2px; left: 2px;
+      transition: left 0.2s;
+    }
+    .layer-item.active .layer-toggle { background: #1a4a6e; border-color: #5bc0de; }
+    .layer-item.active .layer-toggle::after { left: 18px; background: #5bc0de; }
+
+    .layer-swatch {
+      width: 14px; height: 14px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .layer-label {
+      font-size: 0.82rem;
+      color: #c9dce8;
+      flex: 1;
+    }
+    .layer-badge {
+      font-size: 0.65rem;
+      background: #152535;
+      border: 1px solid #2a6496;
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: #8ab4d4;
+    }
+    .layer-badge.loading { border-color: #e8a838; color: #e8a838; }
+    .layer-badge.loaded  { border-color: #3db87a; color: #3db87a; }
+    .layer-badge.missing { border-color: #c04040; color: #c04040; }
+
+    /* Basemap switcher */
+    .basemap-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .basemap-btn {
+      background: #152535;
+      border: 2px solid #1e3a54;
+      border-radius: 6px;
+      padding: 8px 6px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: #8ab4d4;
+      transition: all 0.2s;
+      line-height: 1.3;
+    }
+    .basemap-btn:hover { border-color: #2a6496; color: #eee; }
+    .basemap-btn.active { border-color: #5bc0de; color: #5bc0de; background: #1a3550; }
+    .basemap-btn .bm-icon { font-size: 1.3rem; display: block; margin-bottom: 3px; }
+
+    /* Stats */
+    .stat-row {
+      display: flex; justify-content: space-between;
+      font-size: 0.78rem; padding: 4px 0;
+      color: #8ab4d4;
+      border-bottom: 1px solid #1a3550;
+    }
+    .stat-row:last-child { border: none; }
+    .stat-row strong { color: #5bc0de; }
+
+    /* ─── MAP ─── */
+    #map { flex: 1; }
+
+    /* ─── STATUS BAR ─── */
+    #statusbar {
+      background: #0d1b2a;
+      border-top: 1px solid #1e3a54;
+      padding: 4px 14px;
+      font-size: 0.7rem;
+      color: #8ab4d4;
+      display: flex; gap: 20px; align-items: center;
+      flex-shrink: 0;
+    }
+    #statusbar .coord { color: #5bc0de; }
+    #statusbar .progress {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .progress-bar {
+      width: 100px; height: 6px;
+      background: #152535;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: #5bc0de;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    /* Popup */
+    .leaflet-popup-content-wrapper {
+      background: #0d1b2a;
+      border: 1px solid #2a6496;
+      border-radius: 8px;
+      color: #eee;
+    }
+    .leaflet-popup-tip { background: #2a6496; }
+    .popup-title {
+      font-weight: 700; font-size: 0.9rem;
+      color: #5bc0de; margin-bottom: 6px;
+    }
+    .popup-row {
+      font-size: 0.78rem; padding: 2px 0;
+      color: #c9dce8;
+    }
+    .popup-row span { color: #8ab4d4; margin-right: 4px; }
+
+    /* Loading overlay */
+    #loading-overlay {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      background: rgba(13,27,42,0.92);
+      border: 1px solid #2a6496;
+      border-radius: 10px;
+      padding: 20px 28px;
+      text-align: center;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #1e3a54;
+      border-top-color: #5bc0de;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #0d1b2a; }
+    ::-webkit-scrollbar-thumb { background: #2a6496; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="brand">
+    <div class="logo-icon">🗺️</div>
+    <div>
+      <h1>Warri Region GIS Platform</h1>
+      <div class="subtitle">Street Naming & House Numbering System</div>
+    </div>
+  </div>
+  <div class="powered-by">Powered by<br><span>Popson Geospatial Services</span></div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+
+    <!-- Search -->
+    <div class="sidebar-section">
+      <h3>🔍 Search</h3>
+      <input id="search-box" type="text" placeholder="Search address, street, place…" />
+      <div id="search-results">Type to search…</div>
+    </div>
+
+    <!-- Map Layers -->
+    <div class="sidebar-section">
+      <h3>📂 Map Layers</h3>
+      <div id="layer-controls"></div>
+    </div>
+
+    <!-- Basemap Switcher -->
+    <div class="sidebar-section">
+      <h3>🌍 Basemap</h3>
+      <div class="basemap-grid" id="basemap-btns"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="sidebar-section">
+      <h3>📊 Statistics</h3>
+      <div id="stats-panel">
+        <div class="stat-row"><span>Total Features</span><strong id="stat-total">—</strong></div>
+        <div class="stat-row"><span>Loaded Layers</span><strong id="stat-layers">0</strong></div>
+        <div class="stat-row"><span>Viewport Buildings</span><strong id="stat-buildings">—</strong></div>
+        <div class="stat-row"><span>Zoom Level</span><strong id="stat-zoom">—</strong></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MAP -->
+  <div id="map"></div>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text" style="font-size:0.82rem;color:#8ab4d4;">Loading layer…</div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <span>Warri Region, Delta State, Nigeria</span>
+  <span>Coordinates: <span class="coord" id="coord-display">—</span></span>
+  <span class="progress">
+    <span id="load-label">Ready</span>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  </span>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  LAYER DEFINITIONS
+// ═══════════════════════════════════════════════
+const LAYERS = {
+  buildings:   { label: 'Buildings',    color: '#e8834d', fillColor: '#e8834d', fillOpacity: 0.55, weight: 1,   icon: '🏢', viewport: true  },
+  roads:       { label: 'Roads',        color: '#f5e642', fillColor: '#f5e642', fillOpacity: 0.3,  weight: 2,   icon: '🛣️', viewport: false },
+  boundary:    { label: 'Boundary',     color: '#e84d4d', fillColor: 'none',    fillOpacity: 0,    weight: 2.5, icon: '📐', viewport: false },
+  forest:      { label: 'Forest',       color: '#1e7e34', fillColor: '#2d9e44', fillOpacity: 0.55, weight: 1,   icon: '🌲', viewport: false },
+  vegetation:  { label: 'Vegetation',   color: '#5cb85c', fillColor: '#7acc5e', fillOpacity: 0.45, weight: 1,   icon: '🌿', viewport: false },
+  wetlands:    { label: 'Wetlands',     color: '#5bc0de', fillColor: '#6bd1ef', fillOpacity: 0.45, weight: 1,   icon: '🌊', viewport: false },
+  waterbodies: { label: 'Water Bodies', color: '#2980b9', fillColor: '#3498db', fillOpacity: 0.6,  weight: 1.5, icon: '💧', viewport: false },
+  barerock:    { label: 'Bare Rock',    color: '#a07850', fillColor: '#c8a060', fillOpacity: 0.5,  weight: 1,   icon: '🪨', viewport: false },
+};
+
+// ═══════════════════════════════════════════════
+//  BASEMAPS
+// ═══════════════════════════════════════════════
+const BASEMAPS = {
+  osm:     { label: 'OpenStreetMap', icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '© OpenStreetMap' },
+  hybrid:  { label: 'Google Hybrid', icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', attr: '© Google Maps', noSubdomains: true },
+  terrain: { label: 'Google Terrain',icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', attr: '© Google Maps', noSubdomains: true },
+  topo:    { label: 'Topo Map',      icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr: '© OpenTopoMap' },
+  carto:   { label: 'Dark Carto',    icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr: '© CARTO' },
+  light:   { label: 'Light Carto',   icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attr: '© CARTO' },
+};
+
+// ═══════════════════════════════════════════════
+//  MAP INIT
+// ═══════════════════════════════════════════════
+const map = L.map('map', {
+  center: [5.52, 5.74],
+  zoom: 12,
+  zoomControl: true,
+  attributionControl: true,
+});
+
+let currentBasemap = null;
+let leafletLayers = {};
+let loadedStates = {};
+let featureCounts = {};
+let buildingViewportTimeout = null;
+
+// ═══════════════════════════════════════════════
+//  BASEMAP SWITCHER
+// ═══════════════════════════════════════════════
+function setBasemap(key) {
+  if (currentBasemap) map.removeLayer(currentBasemap);
+  const bm = BASEMAPS[key];
+  const opts = {
+    maxZoom: 20,
+    attribution: bm.attr,
+  };
+  if (bm.noSubdomains) opts.subdomains = [''];
+  currentBasemap = L.tileLayer(bm.url, opts).addTo(map);
+  document.querySelectorAll('.basemap-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.key === key);
+  });
+}
+
+const bmContainer = document.getElementById('basemap-btns');
+Object.entries(BASEMAPS).forEach(([key, bm]) => {
+  const btn = document.createElement('div');
+  btn.className = 'basemap-btn';
+  btn.dataset.key = key;
+  btn.innerHTML = `<span class="bm-icon">${bm.icon}</span>${bm.label}`;
+  btn.onclick = () => setBasemap(key);
+  bmContainer.appendChild(btn);
+});
+setBasemap('hybrid');   // Default: Google Hybrid
+
+// ═══════════════════════════════════════════════
+//  LAYER CONTROLS
+// ═══════════════════════════════════════════════
+const ctrlContainer = document.getElementById('layer-controls');
+Object.entries(LAYERS).forEach(([key, cfg]) => {
+  const item = document.createElement('div');
+  item.className = 'layer-item';
+  item.dataset.layer = key;
+  item.innerHTML = `
+    <div class="layer-toggle"></div>
+    <div class="layer-swatch" style="background:${cfg.color};border:1px solid rgba(255,255,255,0.2)"></div>
+    <div class="layer-label">${cfg.icon} ${cfg.label}</div>
+    <div class="layer-badge" id="badge-${key}">Off</div>
+  `;
+  item.onclick = () => toggleLayer(key, item);
+  ctrlContainer.appendChild(item);
+});
+
+// ═══════════════════════════════════════════════
+//  LOAD LAYER  (buildings get viewport loading)
+// ═══════════════════════════════════════════════
+function showLoading(text) {
+  const ov = document.getElementById('loading-overlay');
+  document.getElementById('loading-text').textContent = text;
+  ov.style.display = 'block';
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').style.display = 'none';
+}
+function setProgress(pct) {
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('load-label').textContent = pct < 100 ? `Loading ${pct}%` : 'Ready';
+}
+
+async function loadLayer(key) {
+  const cfg = LAYERS[key];
+  setBadge(key, 'loading', 'Loading…');
+  setProgress(10);
+
+  let url;
+  if (key === 'buildings') {
+    // Viewport-based load for buildings
+    const b = map.getBounds();
+    url = `/api/layer/buildings/bbox?minx=${b.getWest()}&miny=${b.getSouth()}&maxx=${b.getEast()}&maxy=${b.getNorth()}`;
+  } else {
+    url = `/api/layer/${key}`;
+  }
+
+  try {
+    showLoading(`Loading ${cfg.label}…`);
+    setProgress(30);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    setProgress(60);
+    const data = await res.json();
+    setProgress(85);
+
+    const count = data.features ? data.features.length : 0;
+    featureCounts[key] = count;
+
+    if (leafletLayers[key]) map.removeLayer(leafletLayers[key]);
+
+    leafletLayers[key] = L.geoJSON(data, {
+      style: (feat) => ({
+        color: cfg.color,
+        fillColor: cfg.fillColor === 'none' ? 'transparent' : cfg.fillColor,
+        fillOpacity: cfg.fillColor === 'none' ? 0 : cfg.fillOpacity,
+        weight: cfg.weight,
+        opacity: 0.9,
+      }),
+      pointToLayer: (feat, latlng) =>
+        L.circleMarker(latlng, { radius: 5, color: cfg.color, fillColor: cfg.fillColor, fillOpacity: 0.8 }),
+      onEachFeature: (feat, layer) => {
+        const props = feat.properties || {};
+        if (Object.keys(props).length > 0) {
+          const rows = Object.entries(props)
+            .filter(([k, v]) => v !== null && v !== undefined && v !== '')
+            .slice(0, 8)
+            .map(([k, v]) => `<div class="popup-row"><span>${k}:</span>${v}</div>`)
+            .join('');
+          layer.bindPopup(`<div class="popup-title">${cfg.icon} ${cfg.label}</div>${rows || '<div class="popup-row">No attributes</div>'}`);
+        }
+      },
+      renderer: L.canvas({ tolerance: 2 }),
+    }).addTo(map);
+
+    loadedStates[key] = true;
+    setBadge(key, 'loaded', count.toLocaleString() + ' ft');
+    setProgress(100);
+    hideLoading();
+    updateStats();
+  } catch (err) {
+    console.warn('Layer load error:', key, err);
+    setBadge(key, 'missing', 'No file');
+    hideLoading();
+    setProgress(0);
+  }
+}
+
+function unloadLayer(key) {
+  if (leafletLayers[key]) {
+    map.removeLayer(leafletLayers[key]);
+    delete leafletLayers[key];
+  }
+  loadedStates[key] = false;
+  setBadge(key, '', 'Off');
+  updateStats();
+}
+
+function toggleLayer(key, item) {
+  item.classList.toggle('active');
+  if (item.classList.contains('active')) {
+    loadLayer(key);
+  } else {
+    unloadLayer(key);
+  }
+}
+
+function setBadge(key, cls, text) {
+  const badge = document.getElementById('badge-' + key);
+  if (!badge) return;
+  badge.className = 'layer-badge' + (cls ? ' ' + cls : '');
+  badge.textContent = text;
+}
+
+// ═══════════════════════════════════════════════
+//  BUILDINGS VIEWPORT REFRESH ON MAP MOVE
+// ═══════════════════════════════════════════════
+function refreshBuildingsIfActive() {
+  const item = document.querySelector('.layer-item[data-layer="buildings"]');
+  if (item && item.classList.contains('active')) {
+    clearTimeout(buildingViewportTimeout);
+    buildingViewportTimeout = setTimeout(() => loadLayer('buildings'), 600);
+  }
+}
+map.on('moveend', refreshBuildingsIfActive);
+map.on('zoomend', () => {
+  refreshBuildingsIfActive();
+  document.getElementById('stat-zoom').textContent = map.getZoom();
+});
+
+// ═══════════════════════════════════════════════
+//  STATISTICS
+// ═══════════════════════════════════════════════
+function updateStats() {
+  const loaded = Object.values(loadedStates).filter(Boolean).length;
+  document.getElementById('stat-layers').textContent = loaded;
+  const total = Object.values(featureCounts).reduce((a, b) => a + b, 0);
+  document.getElementById('stat-total').textContent = total > 0 ? total.toLocaleString() : '—';
+  document.getElementById('stat-buildings').textContent = featureCounts['buildings'] !== undefined
+    ? featureCounts['buildings'].toLocaleString() : '—';
+  document.getElementById('stat-zoom').textContent = map.getZoom();
+}
+updateStats();
+
+// ═══════════════════════════════════════════════
+//  COORDINATE DISPLAY
+// ═══════════════════════════════════════════════
+map.on('mousemove', (e) => {
+  document.getElementById('coord-display').textContent =
+    `${e.latlng.lat.toFixed(5)}°N, ${e.latlng.lng.toFixed(5)}°E`;
+});
+
+// ═══════════════════════════════════════════════
+//  SEARCH (Nominatim geocoder)
+// ═══════════════════════════════════════════════
+let searchMarker = null;
+let searchTimeout = null;
+
+document.getElementById('search-box').addEventListener('input', (e) => {
+  clearTimeout(searchTimeout);
+  const q = e.target.value.trim();
+  if (q.length < 3) {
+    document.getElementById('search-results').textContent = 'Type to search…';
+    return;
+  }
+  searchTimeout = setTimeout(async () => {
+    document.getElementById('search-results').textContent = 'Searching…';
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', Warri, Nigeria')}&format=json&limit=3`
+      );
+      const results = await r.json();
+      if (!results.length) {
+        document.getElementById('search-results').textContent = 'No results found.';
+        return;
+      }
+      const best = results[0];
+      const lat = parseFloat(best.lat), lon = parseFloat(best.lon);
+      map.flyTo([lat, lon], 16, { duration: 1.2 });
+      if (searchMarker) map.removeLayer(searchMarker);
+      searchMarker = L.marker([lat, lon]).addTo(map)
+        .bindPopup(`<div class="popup-title">📍 ${best.display_name.split(',')[0]}</div>
+          <div class="popup-row"><span>Type:</span>${best.type}</div>`)
+        .openPopup();
+      document.getElementById('search-results').textContent = `Found: ${best.display_name.split(',').slice(0,2).join(',')}`;
+    } catch {
+      document.getElementById('search-results').textContent = 'Search error.';
+    }
+  }, 500);
+});
+
+// ═══════════════════════════════════════════════
+//  AUTO-LOAD BOUNDARY + ROADS on startup
+// ═══════════════════════════════════════════════
+window.addEventListener('load', () => {
+  ['boundary', 'roads'].forEach(key => {
+    const item = document.querySelector(`.layer-item[data-layer="${key}"]`);
+    if (item) {
+      item.classList.add('active');
+      loadLayer(key);
+    }
+  });
+});
+</script>
+</body>
+</html>
