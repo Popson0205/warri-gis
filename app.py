@@ -18,7 +18,7 @@ LAYER_FILES = {
     'forest':      'Forest.geojson',
     'wetland':    'Wetland.geojson',
     'waterbodies': 'Waterbodies.geojson',
-   
+    'woodland' : 'Woodland.geojson'
 }
 
 # Remote URL overrides (set via environment variables on Render)
