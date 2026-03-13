@@ -16,10 +16,9 @@ LAYER_FILES = {
     'roads':       'Road.geojson',
     'boundary':    'Warri Region.geojson',
     'forest':      'Forest.geojson',
-    'vegetation':  'Vegetation.geojson',
-    'wetlands':    'Wetland.geojson',
+    'wetland':    'Wetland.geojson',
     'waterbodies': 'Waterbodies.geojson',
-    'barerock':    'Barerock.geojson',
+   
 }
 
 # Remote URL overrides (set via environment variables on Render)
