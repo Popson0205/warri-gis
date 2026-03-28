@@ -11,13 +11,13 @@ TILES_DIR = os.path.join(BASE_DIR, 'tiles')   # pre-tiled buildings on disk
 TILE_DEG  = 0.02                               # ~2km per tile
 
 LAYER_FILES = {
-    'Buildings':   'Building.geojson',
+    'Buildings':   'Buildings.geojson',
     'Roads':       'Road.geojson',
     'Boundary':    'Warri Region.geojson',
     'Forest':      'Forest.geojson',
-    'Wetlands':    'Wetland.geojson',
-    'Waterbodies': 'Waterbodies.geojson',
-    'Woodland':    'Woodland.geojson',
+    'Woodland':    'Vegetation.geojson',
+    'Wetlands':    'Wetlands.geojson',
+    'Waterbodies': 'Water Bodies.geojson',
 }
 
 REMOTE_URLS = {
@@ -78,7 +78,7 @@ def pretile_buildings():
         return
 
     print('[startup] Pre-tiling buildings — this runs once…', flush=True)
-    data = _load_raw('buildings')
+    data = _load_raw('Buildings')
     features = data.get('features', [])
     print(f'[startup] Tiling {len(features)} building features…', flush=True)
 
@@ -112,7 +112,7 @@ def pretile_buildings():
 def load_small_layers():
     """Load all non-buildings layers into RAM (they're small)."""
     for key in LAYER_FILES:
-        if key == 'buildings': continue
+        if key == 'Buildings': continue
         try:
             data = _load_raw(key)
             features = data.get('features', [])
@@ -147,7 +147,7 @@ def index():
 def list_layers():
     result = {}
     for key in LAYER_FILES:
-        if key == 'buildings':
+        if key == 'Buildings':
             tiles = len([f for f in os.listdir(TILES_DIR) if f.endswith('.gz')]) if os.path.exists(TILES_DIR) else 0
             result[key] = {'available': tiles > 0 or bool(REMOTE_URLS.get(key)), 'tiles': tiles}
         else:
@@ -197,7 +197,7 @@ def buildings_bbox():
 
 @app.route('/api/layer/<layer_name>/bbox')
 def get_layer_bbox(layer_name):
-    if layer_name == 'buildings':
+    if layer_name == 'Buildings':
         return buildings_bbox()
     if layer_name not in LAYER_FILES:
         return jsonify({'error': 'Layer not found'}), 404
