@@ -1,17 +1,15 @@
 from flask import Flask, jsonify, send_from_directory, Response, request
 from flask_cors import CORS
-import json, os, gzip, math, urllib.request
+import json, os, gzip, urllib.request, threading
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
 
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR  = os.path.join(BASE_DIR, 'data')
-TILES_DIR = os.path.join(BASE_DIR, 'tiles')   # pre-tiled buildings on disk
-TILE_DEG  = 0.02                               # ~2km per tile
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
 
 LAYER_FILES = {
-    'Buildings':   'Buildings.geojson',
+    'Buildings':   None,  # loaded from remote only
     'Roads':       'Road.geojson',
     'Boundary':    'Warri Region.geojson',
     'Forest':      'Forest.geojson',
@@ -24,8 +22,11 @@ REMOTE_URLS = {
     'Buildings': os.environ.get('BUILDINGS_URL', 'https://github.com/Popson0205/warri-gis/releases/download/v1.0/Building.geojson'),
 }
 
-# ── Small layers loaded fully into RAM (all except buildings) ─────────────────
-_layer_cache = {}
+# ── Cache ─────────────────────────────────────────────────────────────────────
+_layer_cache    = {}        # small layers in RAM
+_buildings_data = None      # full buildings GeoJSON in RAM once downloaded
+_buildings_lock = threading.Lock()
+_buildings_ready = False
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _flatten_coords(c):
@@ -47,74 +48,55 @@ def _simplify(coords):
         return [round(coords[0], 6), round(coords[1], 6)]
     return [_simplify(c) for c in coords]
 
-def _load_raw(layer_name):
-    filename = LAYER_FILES.get(layer_name)
-    filepath = os.path.join(DATA_DIR, filename) if filename else None
-    if filepath and os.path.exists(filepath):
+def _load_file(key):
+    filename = LAYER_FILES.get(key)
+    if not filename: return {'type': 'FeatureCollection', 'features': []}
+    filepath = os.path.join(DATA_DIR, filename)
+    if os.path.exists(filepath):
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
-    remote_url = REMOTE_URLS.get(layer_name, '')
-    if remote_url:
-        print(f'[startup] Fetching {layer_name} from {remote_url}', flush=True)
-        with urllib.request.urlopen(remote_url, timeout=180) as r:
-            return json.loads(r.read().decode('utf-8'))
     return {'type': 'FeatureCollection', 'features': []}
 
-def _tile_key(x, y): return f'{x}_{y}'
-def _tile_path(x, y): return os.path.join(TILES_DIR, f'{x}_{y}.json.gz')
+def gzip_resp(data_str):
+    compressed = gzip.compress(data_str.encode('utf-8'), compresslevel=6)
+    r = Response(compressed, status=200, mimetype='application/json')
+    r.headers['Content-Encoding'] = 'gzip'
+    r.headers['Cache-Control']    = 'public, max-age=3600'
+    r.headers['Vary']             = 'Accept-Encoding'
+    return r
 
-# ── PRE-TILE buildings to disk ────────────────────────────────────────────────
-def pretile_buildings():
-    """
-    Split buildings into small ~2km tile files on disk.
-    Each tile is a gzipped GeoJSON FeatureCollection.
-    Only tiles that are requested get loaded — never the whole dataset.
-    """
-    os.makedirs(TILES_DIR, exist_ok=True)
-    # Skip if already tiled
-    existing = [f for f in os.listdir(TILES_DIR) if f.endswith('.json.gz')]
-    if existing:
-        print(f'[startup] Buildings already tiled ({len(existing)} tiles found)', flush=True)
-        return
-
-    print('[startup] Pre-tiling buildings — this runs once…', flush=True)
-    data = _load_raw('Buildings')
-    features = data.get('features', [])
-    print(f'[startup] Tiling {len(features)} building features…', flush=True)
-
-    grid = {}
-    for feat in features:
-        bb = _feat_bbox(feat)
-        if not bb: continue
-        minx, miny, maxx, maxy = bb
-        # Simplify coords to reduce tile size
-        geom = feat.get('geometry', {})
-        if geom and geom.get('coordinates'):
-            geom['coordinates'] = _simplify(geom['coordinates'])
-        cx0 = math.floor(minx / TILE_DEG)
-        cy0 = math.floor(miny / TILE_DEG)
-        cx1 = math.floor(maxx / TILE_DEG)
-        cy1 = math.floor(maxy / TILE_DEG)
-        for cx in range(cx0, cx1 + 1):
-            for cy in range(cy0, cy1 + 1):
-                k = _tile_key(cx, cy)
-                if k not in grid: grid[k] = {'cx': cx, 'cy': cy, 'feats': []}
-                grid[k]['feats'].append(feat)
-
-    for k, tile in grid.items():
-        fc = {'type': 'FeatureCollection', 'features': tile['feats']}
-        raw = json.dumps(fc, separators=(',', ':')).encode('utf-8')
-        with gzip.open(_tile_path(tile['cx'], tile['cy']), 'wb', compresslevel=6) as f:
-            f.write(raw)
-
-    print(f'[startup] ✓ Buildings tiled into {len(grid)} tiles', flush=True)
+# ── Background: download buildings into RAM ───────────────────────────────────
+def _fetch_buildings():
+    global _buildings_data, _buildings_ready
+    with _buildings_lock:
+        if _buildings_ready:
+            return
+        url = REMOTE_URLS.get('Buildings', '')
+        if not url:
+            print('[buildings] No URL configured', flush=True)
+            return
+        try:
+            print(f'[buildings] Downloading from {url}', flush=True)
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=300) as r:
+                raw = json.loads(r.read().decode('utf-8'))
+            features = raw.get('features', [])
+            # Simplify coordinates to reduce memory
+            for feat in features:
+                geom = feat.get('geometry', {})
+                if geom and geom.get('coordinates'):
+                    geom['coordinates'] = _simplify(geom['coordinates'])
+            _buildings_data  = features
+            _buildings_ready = True
+            print(f'[buildings] ✓ {len(features)} buildings loaded into RAM', flush=True)
+        except Exception as e:
+            print(f'[buildings] ✗ Download failed: {e}', flush=True)
 
 def load_small_layers():
-    """Load all non-buildings layers into RAM (they're small)."""
     for key in LAYER_FILES:
         if key == 'Buildings': continue
         try:
-            data = _load_raw(key)
+            data     = _load_file(key)
             features = data.get('features', [])
             for feat in features:
                 geom = feat.get('geometry', {})
@@ -126,30 +108,25 @@ def load_small_layers():
             print(f'[startup] ✗ {key}: {e}', flush=True)
             _layer_cache[key] = []
 
-def gzip_resp(data_str):
-    compressed = gzip.compress(data_str.encode('utf-8'), compresslevel=6)
-    r = Response(compressed, status=200, mimetype='application/json')
-    r.headers['Content-Encoding'] = 'gzip'
-    r.headers['Cache-Control'] = 'public, max-age=3600'
-    r.headers['Vary'] = 'Accept-Encoding'
-    return r
-
-# ── Run startup ───────────────────────────────────────────────────────────────
+# ── Startup ───────────────────────────────────────────────────────────────────
 load_small_layers()
-pretile_buildings()
+threading.Thread(target=_fetch_buildings, daemon=True).start()
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     return send_from_directory(BASE_DIR, 'index.html')
 
+@app.route('/api/ready')
+def ready():
+    return jsonify({'buildings_ready': _buildings_ready})
+
 @app.route('/api/layers')
 def list_layers():
     result = {}
     for key in LAYER_FILES:
         if key == 'Buildings':
-            tiles = len([f for f in os.listdir(TILES_DIR) if f.endswith('.gz')]) if os.path.exists(TILES_DIR) else 0
-            result[key] = {'available': tiles > 0 or bool(REMOTE_URLS.get(key)), 'tiles': tiles}
+            result[key] = {'available': _buildings_ready, 'count': len(_buildings_data) if _buildings_data else 0}
         else:
             result[key] = {'available': len(_layer_cache.get(key, [])) > 0, 'count': len(_layer_cache.get(key, []))}
     return jsonify(result)
@@ -163,6 +140,8 @@ def get_layer(layer_name):
 
 @app.route('/api/layer/buildings/bbox')
 def buildings_bbox():
+    if not _buildings_ready:
+        return jsonify({'error': 'Buildings still loading, please wait…', 'retry': True}), 503
     try:
         minx = float(request.args.get('minx'))
         miny = float(request.args.get('miny'))
@@ -171,29 +150,14 @@ def buildings_bbox():
     except (TypeError, ValueError):
         return jsonify({'error': 'Invalid bbox'}), 400
 
-    cx0 = math.floor(minx / TILE_DEG)
-    cy0 = math.floor(miny / TILE_DEG)
-    cx1 = math.floor(maxx / TILE_DEG)
-    cy1 = math.floor(maxy / TILE_DEG)
+    def in_bbox(feat):
+        bb = _feat_bbox(feat)
+        if not bb: return True
+        fx0, fy0, fx1, fy1 = bb
+        return fx1 >= minx and fx0 <= maxx and fy1 >= miny and fy0 <= maxy
 
-    seen = set(); features = []
-    for cx in range(cx0, cx1 + 1):
-        for cy in range(cy0, cy1 + 1):
-            tp = _tile_path(cx, cy)
-            if not os.path.exists(tp): continue
-            try:
-                with gzip.open(tp, 'rb') as f:
-                    tile = json.loads(f.read())
-                for feat in tile.get('features', []):
-                    fid = id(feat)
-                    if fid not in seen:
-                        seen.add(fid)
-                        features.append(feat)
-            except Exception as e:
-                print(f'[tile error] {cx},{cy}: {e}')
-
-    result = json.dumps({'type': 'FeatureCollection', 'features': features}, separators=(',', ':'))
-    return gzip_resp(result)
+    features = [f for f in (_buildings_data or []) if in_bbox(f)]
+    return gzip_resp(json.dumps({'type': 'FeatureCollection', 'features': features}, separators=(',', ':')))
 
 @app.route('/api/layer/<layer_name>/bbox')
 def get_layer_bbox(layer_name):
