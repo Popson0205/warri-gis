@@ -11,7 +11,7 @@ TILES_DIR = os.path.join(BASE_DIR, 'tiles')   # pre-tiled buildings on disk
 TILE_DEG  = 0.02                               # ~2km per tile
 
 LAYER_FILES = {
-    'Buildings':   'Buildings.geojson',
+    'Buildings':   'Building.geojson',
     'Roads':       'Road.geojson',
     'Boundary':    'Warri Region.geojson',
     'Forest':      'Forest.geojson',
