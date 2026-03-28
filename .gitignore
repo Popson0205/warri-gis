@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-*.pyo
-.env
-.DS_Store
-*.log
-
-# Large file — upload to GitHub Releases instead
-data/Buildings.geojson
