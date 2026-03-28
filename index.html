@@ -94,7 +94,6 @@
       border-right: none;
     }
 
-    /* On mobile: sidebar overlays the map */
     @media (max-width: 600px) {
       #sidebar {
         position: absolute;
@@ -394,9 +393,8 @@
       </div>
     </div>
 
-    <div id="sidebar-footer">
+    <div id="sidebar-footer"></div>
 
-    </div>
   </div><!-- /sidebar -->
 
   <!-- MAP -->
@@ -420,7 +418,6 @@
 
 <script>
 // ═══════════════════════════════════════════════
-
 //  LAYER DEFINITIONS
 // ═══════════════════════════════════════════════
 const LAYERS = {
@@ -432,16 +429,17 @@ const LAYERS = {
   Waterbodies: { label: 'Water Bodies', color: '#2980b9', fillColor: '#3498db', fillOpacity: 0.6,  weight: 1.5, icon: '💧', viewport: false },
   Woodland:    { label: 'Woodland',     color: '#5cb85c', fillColor: '#7acc5e', fillOpacity: 0.45, weight: 1,   icon: '🌿', viewport: false },
 };
+
 // ═══════════════════════════════════════════════
 //  BASEMAPS
 // ═══════════════════════════════════════════════
 const BASEMAPS = {
-  hybrid:  { label: 'Google Hybrid',  icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
-  terrain: { label: 'Google Terrain', icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
-  osm:     { label: 'OpenStreetMap',  icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                             attr: '© OpenStreetMap',  sub: true  },
-  topo:    { label: 'Topo Map',       icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                               attr: '© OpenTopoMap',    sub: true  },
-  dark:    { label: 'Dark Carto',     icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                  attr: '© CARTO',          sub: true  },
-  light:   { label: 'Light Carto',    icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                 attr: '© CARTO',          sub: true  },
+  hybrid:  { label: 'Google Hybrid',  icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',                           attr: '© Google Maps',   sub: false },
+  terrain: { label: 'Google Terrain', icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',                           attr: '© Google Maps',   sub: false },
+  osm:     { label: 'OpenStreetMap',  icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                            attr: '© OpenStreetMap', sub: true  },
+  topo:    { label: 'Topo Map',       icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                              attr: '© OpenTopoMap',   sub: true  },
+  dark:    { label: 'Dark Carto',     icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                 attr: '© CARTO',         sub: true  },
+  light:   { label: 'Light Carto',    icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                attr: '© CARTO',         sub: true  },
 };
 
 // ═══════════════════════════════════════════════
@@ -603,8 +601,8 @@ function setBadge(key, cls, text) {
 // ═══════════════════════════════════════════════
 //  BUILDINGS VIEWPORT REFRESH — with tile cache
 // ═══════════════════════════════════════════════
-const _loadedTiles = new Set();   // tracks which grid cells are already rendered
-const TILE_DEG = 0.02;            // ~2km tiles
+const _loadedTiles = new Set();
+const TILE_DEG = 0.02;
 
 function _tileKey(x, y) { return `${x},${y}`; }
 
@@ -628,9 +626,8 @@ async function refreshBuildings() {
   const tiles  = _tilesForBounds(bounds);
   const newTiles = tiles.filter(t => !_loadedTiles.has(_tileKey(t.x, t.y)));
 
-  if (newTiles.length === 0) return;  // all visible tiles already loaded — instant!
+  if (newTiles.length === 0) return;
 
-  // Only fetch the bounding box of the NEW unseen tiles
   const minx = Math.min(...newTiles.map(t => t.x)) * TILE_DEG;
   const miny = Math.min(...newTiles.map(t => t.y)) * TILE_DEG;
   const maxx = (Math.max(...newTiles.map(t => t.x)) + 1) * TILE_DEG;
@@ -644,7 +641,6 @@ async function refreshBuildings() {
 
     if (data.features && data.features.length > 0) {
       if (!leafletLayers['buildings']) {
-        // First load — create the layer
         leafletLayers['buildings'] = L.geoJSON(null, {
           style: () => ({
             color: LAYERS.buildings.color,
@@ -665,12 +661,10 @@ async function refreshBuildings() {
           renderer: L.canvas({ tolerance: 2 }),
         }).addTo(map);
       }
-      // Add only new features (not full replace)
       leafletLayers['buildings'].addData(data);
       featureCounts['buildings'] = (featureCounts['buildings'] || 0) + data.features.length;
     }
 
-    // Mark tiles as loaded
     newTiles.forEach(t => _loadedTiles.add(_tileKey(t.x, t.y)));
     loadedStates['buildings'] = true;
     setBadge('buildings', 'loaded', (featureCounts['buildings'] || 0).toLocaleString() + ' ft');
@@ -681,12 +675,10 @@ async function refreshBuildings() {
   }
 }
 
-// Reset tile cache when zoom changes (different detail level)
 let lastZoom = map.getZoom();
 map.on('zoomend', () => {
   const newZoom = map.getZoom();
   if (Math.abs(newZoom - lastZoom) >= 1) {
-    // Zoom changed meaningfully — clear cache and re-fetch
     _loadedTiles.clear();
     if (leafletLayers['buildings']) {
       map.removeLayer(leafletLayers['buildings']);
@@ -776,7 +768,6 @@ searchInput.addEventListener('input', e => {
             .bindPopup(`<div class="popup-title">📍 ${parts[0].trim()}</div>
               <div class="popup-row"><span>Type:</span> ${item.type}</div>`)
             .openPopup();
-          // Auto-close sidebar on mobile after selecting
           if (window.innerWidth <= 600) {
             document.getElementById('sidebar').classList.add('collapsed');
           }
@@ -792,7 +783,6 @@ searchInput.addEventListener('input', e => {
   }, 400);
 });
 
-// Close dropdown when clicking outside
 document.addEventListener('click', e => {
   if (!searchInput.contains(e.target) && !acList.contains(e.target)) {
     acList.style.display = 'none';
@@ -807,7 +797,6 @@ function toggleSidebar() {
   setTimeout(() => map.invalidateSize(), 310);
 }
 
-// Auto-collapse on mobile on load
 if (window.innerWidth <= 600) {
   document.getElementById('sidebar').classList.add('collapsed');
 }
@@ -824,4 +813,3 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
-html>
