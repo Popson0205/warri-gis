@@ -94,6 +94,7 @@
       border-right: none;
     }
 
+    /* On mobile: sidebar overlays the map */
     @media (max-width: 600px) {
       #sidebar {
         position: absolute;
@@ -393,8 +394,9 @@
       </div>
     </div>
 
-    <div id="sidebar-footer"></div>
+    <div id="sidebar-footer">
 
+    </div>
   </div><!-- /sidebar -->
 
   <!-- MAP -->
@@ -434,12 +436,12 @@ const LAYERS = {
 //  BASEMAPS
 // ═══════════════════════════════════════════════
 const BASEMAPS = {
-  hybrid:  { label: 'Google Hybrid',  icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',                           attr: '© Google Maps',   sub: false },
-  terrain: { label: 'Google Terrain', icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',                           attr: '© Google Maps',   sub: false },
-  osm:     { label: 'OpenStreetMap',  icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                            attr: '© OpenStreetMap', sub: true  },
-  topo:    { label: 'Topo Map',       icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                              attr: '© OpenTopoMap',   sub: true  },
-  dark:    { label: 'Dark Carto',     icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                 attr: '© CARTO',         sub: true  },
-  light:   { label: 'Light Carto',    icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                attr: '© CARTO',         sub: true  },
+  hybrid:  { label: 'Google Hybrid',  icon: '🛰️', url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
+  terrain: { label: 'Google Terrain', icon: '⛰️', url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',                            attr: '© Google Maps',    sub: false },
+  osm:     { label: 'OpenStreetMap',  icon: '🗺️', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                             attr: '© OpenStreetMap',  sub: true  },
+  topo:    { label: 'Topo Map',       icon: '📏', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                               attr: '© OpenTopoMap',    sub: true  },
+  dark:    { label: 'Dark Carto',     icon: '🌑', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                  attr: '© CARTO',          sub: true  },
+  light:   { label: 'Light Carto',    icon: '☀️', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',                 attr: '© CARTO',          sub: true  },
 };
 
 // ═══════════════════════════════════════════════
@@ -523,7 +525,7 @@ async function loadLayer(key) {
   showLoading(`Loading ${cfg.label}…`);
   setProgress(20);
 
-  let url = key === 'buildings'
+  let url = key === 'Buildings'
     ? (() => {
         const b = map.getBounds();
         return `/api/layer/buildings/bbox?minx=${b.getWest()}&miny=${b.getSouth()}&maxx=${b.getEast()}&maxy=${b.getNorth()}`;
@@ -601,8 +603,8 @@ function setBadge(key, cls, text) {
 // ═══════════════════════════════════════════════
 //  BUILDINGS VIEWPORT REFRESH — with tile cache
 // ═══════════════════════════════════════════════
-const _loadedTiles = new Set();
-const TILE_DEG = 0.02;
+const _loadedTiles = new Set();   // tracks which grid cells are already rendered
+const TILE_DEG = 0.02;            // ~2km tiles
 
 function _tileKey(x, y) { return `${x},${y}`; }
 
@@ -619,34 +621,36 @@ function _tilesForBounds(bounds) {
 }
 
 async function refreshBuildings() {
-  const item = document.querySelector('.layer-item[data-layer="buildings"]');
+  const item = document.querySelector('.layer-item[data-layer="Buildings"]');
   if (!item || !item.classList.contains('active')) return;
 
   const bounds = map.getBounds();
   const tiles  = _tilesForBounds(bounds);
   const newTiles = tiles.filter(t => !_loadedTiles.has(_tileKey(t.x, t.y)));
 
-  if (newTiles.length === 0) return;
+  if (newTiles.length === 0) return;  // all visible tiles already loaded — instant!
 
+  // Only fetch the bounding box of the NEW unseen tiles
   const minx = Math.min(...newTiles.map(t => t.x)) * TILE_DEG;
   const miny = Math.min(...newTiles.map(t => t.y)) * TILE_DEG;
   const maxx = (Math.max(...newTiles.map(t => t.x)) + 1) * TILE_DEG;
   const maxy = (Math.max(...newTiles.map(t => t.y)) + 1) * TILE_DEG;
 
   try {
-    setBadge('buildings', 'loading', 'Loading…');
+    setBadge('Buildings', 'loading', 'Loading…');
     const res = await fetch(`/api/layer/buildings/bbox?minx=${minx}&miny=${miny}&maxx=${maxx}&maxy=${maxy}`);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
 
     if (data.features && data.features.length > 0) {
-      if (!leafletLayers['buildings']) {
-        leafletLayers['buildings'] = L.geoJSON(null, {
+      if (!leafletLayers['Buildings']) {
+        // First load — create the layer
+        leafletLayers['Buildings'] = L.geoJSON(null, {
           style: () => ({
-            color: LAYERS.buildings.color,
-            fillColor: LAYERS.buildings.fillColor,
-            fillOpacity: LAYERS.buildings.fillOpacity,
-            weight: LAYERS.buildings.weight,
+            color: LAYERS.Buildings.color,
+            fillColor: LAYERS.Buildings.fillColor,
+            fillOpacity: LAYERS.Buildings.fillOpacity,
+            weight: LAYERS.Buildings.weight,
             opacity: 0.9,
           }),
           onEachFeature: (feat, layer) => {
@@ -661,30 +665,34 @@ async function refreshBuildings() {
           renderer: L.canvas({ tolerance: 2 }),
         }).addTo(map);
       }
-      leafletLayers['buildings'].addData(data);
-      featureCounts['buildings'] = (featureCounts['buildings'] || 0) + data.features.length;
+      // Add only new features (not full replace)
+      leafletLayers['Buildings'].addData(data);
+      featureCounts['Buildings'] = (featureCounts['Buildings'] || 0) + data.features.length;
     }
 
+    // Mark tiles as loaded
     newTiles.forEach(t => _loadedTiles.add(_tileKey(t.x, t.y)));
-    loadedStates['buildings'] = true;
-    setBadge('buildings', 'loaded', (featureCounts['buildings'] || 0).toLocaleString() + ' ft');
+    loadedStates['Buildings'] = true;
+    setBadge('Buildings', 'loaded', (featureCounts['Buildings'] || 0).toLocaleString() + ' ft');
     updateStats();
   } catch (err) {
     console.warn('Buildings load error:', err);
-    setBadge('buildings', 'missing', 'Error');
+    setBadge('Buildings', 'missing', 'Error');
   }
 }
 
+// Reset tile cache when zoom changes (different detail level)
 let lastZoom = map.getZoom();
 map.on('zoomend', () => {
   const newZoom = map.getZoom();
   if (Math.abs(newZoom - lastZoom) >= 1) {
+    // Zoom changed meaningfully — clear cache and re-fetch
     _loadedTiles.clear();
-    if (leafletLayers['buildings']) {
-      map.removeLayer(leafletLayers['buildings']);
-      delete leafletLayers['buildings'];
+    if (leafletLayers['Buildings']) {
+      map.removeLayer(leafletLayers['Buildings']);
+      delete leafletLayers['Buildings'];
     }
-    featureCounts['buildings'] = 0;
+    featureCounts['Buildings'] = 0;
   }
   lastZoom = newZoom;
   clearTimeout(buildingTimer);
@@ -706,7 +714,7 @@ function updateStats() {
   const total = Object.values(featureCounts).reduce((a, b) => a + b, 0);
   document.getElementById('stat-total').textContent = total > 0 ? total.toLocaleString() : '—';
   document.getElementById('stat-buildings').textContent =
-    featureCounts['buildings'] !== undefined ? featureCounts['buildings'].toLocaleString() : '—';
+    featureCounts['Buildings'] !== undefined ? featureCounts['Buildings'].toLocaleString() : '—';
   document.getElementById('stat-zoom').textContent = map.getZoom();
 }
 updateStats();
@@ -768,6 +776,7 @@ searchInput.addEventListener('input', e => {
             .bindPopup(`<div class="popup-title">📍 ${parts[0].trim()}</div>
               <div class="popup-row"><span>Type:</span> ${item.type}</div>`)
             .openPopup();
+          // Auto-close sidebar on mobile after selecting
           if (window.innerWidth <= 600) {
             document.getElementById('sidebar').classList.add('collapsed');
           }
@@ -783,6 +792,7 @@ searchInput.addEventListener('input', e => {
   }, 400);
 });
 
+// Close dropdown when clicking outside
 document.addEventListener('click', e => {
   if (!searchInput.contains(e.target) && !acList.contains(e.target)) {
     acList.style.display = 'none';
@@ -797,6 +807,7 @@ function toggleSidebar() {
   setTimeout(() => map.invalidateSize(), 310);
 }
 
+// Auto-collapse on mobile on load
 if (window.innerWidth <= 600) {
   document.getElementById('sidebar').classList.add('collapsed');
 }
@@ -805,7 +816,7 @@ if (window.innerWidth <= 600) {
 //  AUTO-LOAD BOUNDARY + ROADS on startup
 // ═══════════════════════════════════════════════
 window.addEventListener('load', () => {
-  ['boundary', 'roads'].forEach(key => {
+  ['Boundary', 'Roads'].forEach(key => {
     const item = document.querySelector(`.layer-item[data-layer="${key}"]`);
     if (item) { item.classList.add('active'); loadLayer(key); }
   });
@@ -813,3 +824,4 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+html>
