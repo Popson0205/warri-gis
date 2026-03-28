@@ -21,7 +21,7 @@ LAYER_FILES = {
 }
 
 REMOTE_URLS = {
-    'buildings': os.environ.get('BUILDINGS_URL', ''),
+    'buildings': os.environ.get('BUILDINGS_URL', 'https://github.com/Popson0205/warri-gis/releases/download/v1.0/Building.geojson'),
 }
 
 # ── Small layers loaded fully into RAM (all except buildings) ─────────────────
