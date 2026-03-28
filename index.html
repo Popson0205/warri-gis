@@ -525,12 +525,14 @@ async function loadLayer(key) {
   showLoading(`Loading ${cfg.label}…`);
   setProgress(20);
 
-  let url = key === 'Buildings'
-    ? (() => {
-        const b = map.getBounds();
-        return `/api/layer/buildings/bbox?minx=${b.getWest()}&miny=${b.getSouth()}&maxx=${b.getEast()}&maxy=${b.getNorth()}`;
-      })()
-    : `/api/layer/${key}`;
+  if (key === 'Buildings') {
+    hideLoading();
+    setBadge('Buildings', 'loading', 'Preparing…');
+    waitForBuildings();
+    return;
+  }
+
+  let url = `/api/layer/${key}`;
 
   try {
     setProgress(40);
@@ -678,6 +680,27 @@ async function refreshBuildings() {
   } catch (err) {
     console.warn('Buildings load error:', err);
     setBadge('Buildings', 'missing', 'Error');
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  POLL UNTIL BUILDINGS ARE READY (Render cold start)
+// ═══════════════════════════════════════════════
+async function waitForBuildings() {
+  const item = document.querySelector('.layer-item[data-layer="Buildings"]');
+  if (!item || !item.classList.contains('active')) return;
+  try {
+    const res  = await fetch('/api/ready');
+    const data = await res.json();
+    if (data.tiling_ready) {
+      setBadge('Buildings', 'loading', 'Loading…');
+      refreshBuildings();
+    } else {
+      setBadge('Buildings', 'loading', 'Preparing…');
+      setTimeout(waitForBuildings, 3000);
+    }
+  } catch {
+    setTimeout(waitForBuildings, 5000);
   }
 }
 
