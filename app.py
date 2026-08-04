@@ -14,7 +14,7 @@ LAYER_FILES = {
     'Boundary':    'Warri Region.geojson',
     'Forest':      'Forest.geojson',
     'Woodland':    'Woodland.geojson',
-    'Wetlands':    'Wetland.geojson',
+    'Wetland':     'Wetland.geojson',
     'Waterbodies': 'Waterbodies.geojson',
 }
 
