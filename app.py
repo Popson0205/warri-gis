@@ -13,9 +13,9 @@ LAYER_FILES = {
     'Roads':       'Road.geojson',
     'Boundary':    'Warri Region.geojson',
     'Forest':      'Forest.geojson',
-    'Woodland':    'Vegetation.geojson',
-    'Wetlands':    'Wetlands.geojson',
-    'Waterbodies': 'Water Bodies.geojson',
+    'Woodland':    'Woodland.geojson',
+    'Wetlands':    'Wetland.geojson',
+    'Waterbodies': 'Waterbodies.geojson',
 }
 
 REMOTE_URLS = {
